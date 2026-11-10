@@ -8,7 +8,7 @@ machine settings, configuration files and release pins have been supplied.
 Download and run inventory directly on the Linux Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.0/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sudo sh -s --
 ```
 
 Use `--usb-port YOUR_PORT` for a guarded audit, and add
@@ -71,7 +71,7 @@ physical emergency stop or actuator power isolation.
 2. With the printer supervised, run on the target Pi:
 
    ```sh
-   python3 /path/to/auto-installer-v0.2/autoprinter.py --inventory
+   python3 /path/to/auto-installer-v0.2.1/autoprinter.py --inventory
    ```
 
 3. Record the trigger's exact `port`, `vid`, `pid` and `serial` from `usb` in the
@@ -83,7 +83,7 @@ physical emergency stop or actuator power isolation.
    audit does not change printer services, packages, configs, Wi-Fi or firmware:
 
    ```sh
-   sudo sh /path/to/auto-installer-v0.2/run.sh \
+   sudo sh /path/to/auto-installer-v0.2.1/run.sh \
      --report /tmp/autoprinter-audit.json
    ```
 
@@ -171,7 +171,7 @@ refuse mutation. Stop job sources and safely isolate actuators as appropriate;
 an API poll cannot prevent every possible race with another operator.
 
 ```sh
-sudo sh /path/to/auto-installer-v0.2/run.sh --apply --maintenance-confirmed
+sudo sh /path/to/auto-installer-v0.2.1/run.sh --apply --maintenance-confirmed
 ```
 
 This installs/updates the host to the reviewed manifest, backs up configuration
@@ -191,7 +191,7 @@ stack yourself after reviewing the report:
 ```sh
 sudo systemctl start klipper moonraker KlipperScreen
 # Inspect HDMI display, loaded configuration, temperatures, wiring and calibration.
-sudo sh /path/to/auto-installer-v0.2/run.sh --verify --maintenance-confirmed \
+sudo sh /path/to/auto-installer-v0.2.1/run.sh --verify --maintenance-confirmed \
   --display-confirmed --machine-config-confirmed --report /tmp/autoprinter-verify.json
 ```
 
@@ -209,7 +209,7 @@ physically, keep the MCU on verified USB logic power, and inspect the machine.
 The explicit isolated recovery path is:
 
 ```sh
-sudo sh /path/to/auto-installer-v0.2/run.sh --apply --maintenance-confirmed \
+sudo sh /path/to/auto-installer-v0.2.1/run.sh --apply --maintenance-confirmed \
   --recovery-isolated --actuator-power-disconnected
 ```
 
@@ -266,14 +266,14 @@ Public source: https://github.com/xt-programmer/autoprinter-installer
 Download and run read-only hardware inventory on the target Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.0/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sudo sh -s --
 ```
 
 Choose the trigger's physical USB port from that inventory. For a USB-gated
 audit with the requested capabilities selected (no printer changes):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
 ```
 
 Replace `1-1.3` with the actual trigger port. VID/PID/serial are captured from
@@ -285,7 +285,7 @@ For actual installation/maintenance, supply your completed local machine
 manifest and add `--apply --maintenance-confirmed`:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
 ```
 
 The public release contains an incomplete generic manifest. Your actual board
@@ -317,7 +317,7 @@ No password is stored or injected by the ATtiny, and no startup/udev rule or
 reboot-resume task is installed. Standard sudo may request a password on the
 terminal. A future ATtiny command must execute in an already authorized shell.
 
-Maintainers: `release.py --repository OWNER/REPO --tag v0.2.0 --output /outside/source/release`
+Maintainers: `release.py --repository OWNER/REPO --tag v0.2.1 --output /outside/source/release`
 builds the ZIP, checksum, embedded `install.sh` and exact one-command text.
 Publish the generated ZIP/checksum as release assets and commit `install.sh`
 before tagging that same release. Generated files are outside the source tree

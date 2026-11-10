@@ -1,4 +1,4 @@
-# Validation record — v0.2.0
+# Validation record — v0.2.1
 
 Prepared 10 November 2026. Test host: Windows, Python 3.12.14.
 

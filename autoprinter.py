@@ -28,7 +28,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 REPOS = {

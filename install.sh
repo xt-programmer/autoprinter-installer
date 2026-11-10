@@ -1,8 +1,8 @@
 #!/bin/sh
-# Auto-generated for xt-programmer/autoprinter-installer v0.2.0; payload pinned below.
+# Auto-generated for xt-programmer/autoprinter-installer v0.2.1; payload pinned below.
 set -eu
 command -v python3 >/dev/null 2>&1 || { echo 'Python 3.9+ is required' >&2; exit 2; }
-exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.2.0/auto-installer-v0.2.zip --sha256 f0d616e47b607f269ac2e439162bde216fcbe4892fc7e1e98c0fcf40d23e062f "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
+exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.2.1/auto-installer-v0.2.1.zip --sha256 566806cd79230ab6b996ad94b2b0d944701f8896e69fdd1f16dadfbb779645d2 "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
 #!/usr/bin/env python3
 """Download and run a SHA-256-pinned AutoPrinter release.
 

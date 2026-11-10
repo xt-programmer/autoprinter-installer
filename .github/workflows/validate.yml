@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   safety-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python: ['3.9', '3.12']
@@ -21,7 +21,7 @@ jobs:
       - run: python autoprinter.py --inventory
   published-command:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Download and run published inventory command
-        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.0/install.sh | sh -s -- --inventory
+        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sh -s -- --inventory
