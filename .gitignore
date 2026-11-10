@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+*.zip
+*.zip.sha256
+manifest.machine.json
+machine.json
+manifest.prepared.json
+profiles/*
+!profiles/README.md

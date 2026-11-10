@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "trigger_usb": {
+    "port": "REPLACE_FROM_INVENTORY",
+    "vid": "REPLACE",
+    "pid": "REPLACE",
+    "serial": ""
+  },
+  "moonraker_url": "http://127.0.0.1:7125",
+  "adopt_standard_layout": false,
+  "allow_package_install": false,
+  "console_progress": true,
+  "disable_wifi": true,
+  "disable_services": [],
+  "mainsail_port": 8080,
+  "prune_older_days": 90,
+  "required_config": ["macros500", "settings500"],
+  "revisions": {
+    "klipper": null,
+    "moonraker": null,
+    "KlipperScreen": null,
+    "cartographer": null
+  },
+  "mainsail": {
+    "url": null,
+    "sha256": null
+  },
+  "config_files": {},
+  "octopus": {
+    "board": null,
+    "mcu": null,
+    "verified_by": null,
+    "normal_usb": null,
+    "dfu_usb": null,
+    "build_config": null,
+    "build_config_sha256": null,
+    "clock_config": null,
+    "bootloader_kib": null,
+    "flash_address": null,
+    "recovery_instructions": null
+  },
+  "cartographer": {
+    "usb": null,
+    "install_plugin": false
+  },
+  "ready_led": null
+}
