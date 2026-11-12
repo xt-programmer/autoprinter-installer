@@ -5,7 +5,7 @@ STM32 build profiles, full flash backup/read-back/reset proof, artifact-only
 programming and one-shot HID command generation.
 
 - 149 tests discovered on Windows: 145 passed, four POSIX-only tests skipped.
-  Linux CI runs the entire suite on Python 3.9, 3.12 and 3.14.
+  All 149 passed in [Linux CI on Python 3.9, 3.12 and 3.14](https://github.com/xt-programmer/autoprinter-installer/actions/runs/43222743334).
 - All three real pinned firmware bundles were compiled in isolated CI:
   [firmware run 43201247770](https://github.com/xt-programmer/autoprinter-installer/actions/runs/43201247770).
   Config/image/vector/dictionary/source hashes are validated in the suite.
