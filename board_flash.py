@@ -9,6 +9,7 @@ from pathlib import Path
 import autoprinter as ap
 import flash_policy as fp
 import octopus_flasher as of
+import paired_update as paired
 from host_setup import SSHGuard
 
 
@@ -18,13 +19,16 @@ def main(argv=None):
     parser.add_argument('--expected-firmware-sha256',help='required for an external firmware bundle')
     parser.add_argument('--target-port',required=True); parser.add_argument('--target-serial',required=True)
     parser.add_argument('--chip',choices=fp.PROFILES,required=True)
+    parser.add_argument('--klipper-update-only',action='store_true',help='only paired Klipper/board update, with bounded protocol-error recovery')
     for flag in ['apply','flash','enable-flashing-capability','maintenance-confirmed','actuator-power-disconnected','board-confirmed-octopus','allow-bootloader-request','prepare-host-update','supervised-ssh']:
         parser.add_argument('--'+flag,action='store_true')
     parser.add_argument('--ssh-session-pid',type=int)
     for field in ['port','vid','pid','serial']: parser.add_argument('--usb-'+field)
     args=parser.parse_args(argv)
+    if args.klipper_update_only: args.flash=args.prepare_host_update=True
     guard=lock=log=None; state=None
-    report={'status':'AUDIT_ONLY','flash_state':'NOT_ATTEMPTED','host_updated':False}
+    service=txn=retained=None
+    report={'status':'AUDIT_ONLY','flash_state':'NOT_ATTEMPTED','host_updated':False,'mode':'klipper-update-only' if args.klipper_update_only else 'board-flash'}
     try:
         bundled=args.firmware_bundle is None
         if bundled: args.firmware_bundle=Path(__file__).parent/'firmware-bundles'/args.chip
@@ -35,10 +39,14 @@ def main(argv=None):
         device=of.match_port(args.target_port)
         if device['serial']!=args.target_serial: raise fp.FlashError('Target serial changed')
         report.update(eligibility=of.eligibility(device,args.chip),profile=profile,source_commit=metadata['source_commit'],initial_usb=device)
+        if args.klipper_update_only and not report['eligibility'].startswith('NORMAL_'):
+            raise fp.FlashError('Paired update needs an existing normal Klipper MCU for the rollback baseline; initially DFU/unflashed uses --board-flash')
         if not args.apply:
             print(json.dumps(report,indent=2)); return 0
         if not all([args.flash,args.enable_flashing_capability,args.maintenance_confirmed,args.actuator_power_disconnected,args.board_confirmed_octopus]):
             raise fp.FlashError('Apply requires --flash, capability, maintenance, disconnected actuator power and confirmed Octopus flags')
+        if args.klipper_update_only and not args.allow_bootloader_request:
+            raise fp.FlashError('Paired update requires --allow-bootloader-request before staging/stopping services')
         if os.geteuid()!=0: raise fp.FlashError('sudo required')
         hardware=ap.inspect_host()
         ap.supported_host(dict(hardware,os={'ID':'debian','VERSION_ID':'12'}))
@@ -60,7 +68,7 @@ def main(argv=None):
         ap.check_free(['/','/var','/home/pi'])
         if not shutil.which('dfu-util'): raise fp.FlashError('dfu-util missing; provision it separately before this artifact-only transaction')
         guard.check()
-        stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S')
+        stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
         state=Path('/var/lib/autoprinter')/('board-flash-'+stamp)
         state.mkdir(parents=True,mode=0o700); report['state_directory']=str(state)
         log=(state/'run.log').open('a',buffering=1)
@@ -69,11 +77,17 @@ def main(argv=None):
         def inactive():
             _,active=runner.run(['systemctl','is-active','klipper'],timeout=15,check=False)
             if active!='inactive': raise fp.FlashError('Klipper must be inactive before build/DFU; no automatic service stop')
-        inactive()
+        if args.klipper_update_only:
+            service=paired.Service(runner,guard,state); service.preflight()
+            report['service_was_active']=service.was_active
+        else: inactive()
         host=Path('/home/pi/klipper'); env=Path('/home/pi/klippy-env')
+        if host.is_symlink() or env.is_symlink() or not host.is_dir() or not env.is_dir():
+            raise fp.FlashError('Require native existing Klipper and environment directories')
         _,before_commit=runner.run(['runuser','-u','pi','--','git','-C',host,'rev-parse','HEAD'])
         report['host_commit_before']=before_commit
         before_entry_hash=ap.sha256(host/'klippy/klippy.py',guard)
+        report['host_entry_sha256_before']=before_entry_hash
         runner.run([env/'bin/python','-B',host/'klippy/klippy.py','--help'],timeout=30)
         runner.run([env/'bin/python','-m','pip','check'],timeout=30)
         candidate=None
@@ -90,36 +104,60 @@ def main(argv=None):
                 raise fp.FlashError('Requirements changed: stage a separately validated environment before host promotion')
             _,dirty=runner.run(['git','-C',host,'status','--porcelain','--untracked-files=no'],user='pi',env={'GIT_OPTIONAL_LOCKS':'0'})
             if dirty: raise fp.FlashError('Existing tracked host edits must be preserved/reviewed before promotion')
-            for sub in ['extras','plugins']:
-                directory=host/'klippy'/sub
-                if directory.exists():
-                    for path in directory.rglob('*'):
-                        if path.is_file() and path.suffix in ('.py','.so') and '__pycache__' not in path.parts and not (candidate/'klippy'/sub/path.relative_to(directory)).exists():
-                            raise fp.FlashError('External plugin requires reviewed transfer before host promotion: '+str(path))
+            if service:
+                _,tracked=runner.run(['git','-C',host,'ls-files','klippy/extras','klippy/plugins'],user='pi',env={'GIT_OPTIONAL_LOCKS':'0'})
+                report['preserved_plugins']=paired.stage_plugins(host,candidate,set(tracked.splitlines()),guard)
+                runner.run(['chown','-R','--no-dereference','pi:pi',candidate/'klippy'])
+            else:
+                for sub in ['extras','plugins']:
+                    directory=host/'klippy'/sub
+                    if directory.exists():
+                        for path in directory.rglob('*'):
+                            if path.is_file() and path.suffix in ('.py','.so') and '__pycache__' not in path.parts and not (candidate/'klippy'/sub/path.relative_to(directory)).exists():
+                                raise fp.FlashError('External plugin requires reviewed transfer before host promotion: '+str(path))
             runner.run([env/'bin/python','-B',candidate/'klippy/klippy.py','--help'],timeout=30)
             report['staged_host']=str(candidate)
         ap.check_free([state],500*ap.MIB)
+        if service: service.stop()
+        inactive()
         private=state/'identify-source'; private.mkdir()
         shutil.copytree(host/'klippy',private/'klippy')
         (private/'lib').mkdir()
         if (host/'lib/fast-hash').exists(): shutil.copytree(host/'lib/fast-hash',private/'lib/fast-hash')
-        def identify(path,reset=False):
+        def identify(path,reset=False,source=private,old_dictionary=None,check_protocol=False):
             inactive()
             extra=['--reset-after-identify','--expected-dictionary-sha256',metadata['sha256']['klipper.dict']] if reset else []
-            _,out=runner.run([env/'bin/python','-B',Path(__file__).with_name('mcu_identify.py'),'--klippy',private/'klippy','--serial',path]+extra,timeout=25)
+            if old_dictionary is not None:
+                saved=state/'old-dictionary.json'
+                ap.atomic_write(saved,json.dumps(old_dictionary),guard)
+                extra=['--reset-after-identify','--expected-dictionary-file',saved]
+            if check_protocol: extra+=['--check-host-protocol']
+            code,out=runner.run([env/'bin/python','-B',Path(__file__).with_name('mcu_identify.py'),'--klippy',source/'klippy','--serial',path]+extra,timeout=25,check=False)
+            if any(line.startswith('MCU_PROTOCOL_ERROR ') for line in out.splitlines()):
+                raise fp.ProtocolError('MCU protocol parser rejected the live dictionary: '+out[-1000:])
+            if code: raise fp.FlashError('MCU identity command failed: '+out[-1000:])
             values=[json.loads(line.split(' ',1)[1]) for line in out.splitlines() if line.startswith('MCU_IDENTIFY_JSON ')]
             if len(values)!=1: raise fp.FlashError('No unique live MCU identity received')
             return values[0]
         txn=of.Transaction(guard,runner,state,inactive,identify,lambda path:identify(path,reset=True))
         report['transaction']=txn.result
-        result=txn.execute(args.firmware_bundle,device,allow_request=args.allow_bootloader_request)
+        result=txn.execute(args.firmware_bundle,device,allow_request=args.allow_bootloader_request,require_recovery=args.klipper_update_only)
         report['flash_state']=result['state']
         if result['state']!='VERIFIED': raise fp.FlashError('Host promotion requires verified firmware')
+        if service:
+            candidate_private=state/'candidate-identify-source'; candidate_private.mkdir()
+            shutil.copytree(candidate/'klippy',candidate_private/'klippy')
+            (candidate_private/'lib').mkdir()
+            if (candidate/'lib/fast-hash').exists(): shutil.copytree(candidate/'lib/fast-hash',candidate_private/'lib/fast-hash')
+            if identify(of.serial_path(result['normal_usb']),source=candidate_private,check_protocol=True)!=dictionary:
+                raise fp.ProtocolError('Candidate host did not identify the verified firmware dictionary')
         inactive(); guard.check()
         _,current=runner.run(['runuser','-u','pi','--','git','-C',host,'rev-parse','HEAD'])
         if current!=before_commit or ap.sha256(host/'klippy/klippy.py',guard)!=before_entry_hash:
             raise fp.FlashError('Installed host changed during the flash transaction')
         if candidate is not None:
+            paired.verify_plugins(host,report.get('preserved_plugins',[]),guard)
+            paired.verify_plugins(candidate,report.get('preserved_plugins',[]),guard)
             runner.run(['git','-C',candidate,'checkout','-B','master',metadata['source_commit']],user='pi')
             runner.run(['git','-C',candidate,'branch','--set-upstream-to=origin/master','master'],user='pi')
             shutil.copyfile(args.firmware_bundle/'build.config',candidate/'.config')
@@ -136,10 +174,25 @@ def main(argv=None):
             report.update(host_updated=True,host_retained=str(retained),host_commit_after=metadata['source_commit'])
         else: report['host_commit_after']=before_commit
         report['status']='BOARD_AND_HOST_UPDATED_NEEDS_COMMISSIONING' if report['host_updated'] else 'BOARD_VERIFIED_HOST_PRESERVED'
+        if service:
+            report['service_after_update']=service.resume()
+            report['status']='KLIPPER_AND_BOARD_UPDATED_READY_IDLE' if service.was_active else 'KLIPPER_AND_BOARD_UPDATED_PRESERVED_INACTIVE'
         ap.atomic_write(state/'report.json',json.dumps(report,indent=2),guard)
         print('RESULT '+report['status']+'\nREPORT '+str(state/'report.json')); return 0
     except (ap.Refuse,OSError,ValueError,KeyError,TypeError) as error:
         report.update(status='HOST_PROMOTED_NEEDS_REVIEW' if report.get('host_updated') else 'STOPPED_HOST_NOT_UPDATED',error=str(error))
+        if txn: report['flash_state']=txn.result['state']
+        if isinstance(error,fp.ProtocolError) and service and txn and txn.result.get('readback_sha256') and not guard.cancelled.is_set():
+            try:
+                paired.restore_pair(txn,service,host,retained,report,lambda path,old:identify(path,old_dictionary=old))
+            except (ap.Refuse,OSError,ValueError,KeyError,TypeError) as recovery_error:
+                report.update(status='PROTOCOL_ERROR_RECOVERY_INCOMPLETE',recovery_error=str(recovery_error))
+                if not guard.cancelled.is_set():
+                    with contextlib.suppress(OSError,ap.Refuse): service.stop_for_recovery()
+            report['flash_state']=txn.result['state']
+        elif service and guard and not guard.cancelled.is_set() and report.get('host_updated'):
+            # Never leave a failed startup/restarting process running after verification fails.
+            with contextlib.suppress(OSError,ap.Refuse): service.stop_for_recovery()
         if state and guard and not guard.cancelled.is_set():
             with contextlib.suppress(OSError,ap.Refuse): ap.atomic_write(state/'report.json',json.dumps(report,indent=2),guard)
         print(json.dumps(report,indent=2)); return 2

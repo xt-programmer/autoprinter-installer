@@ -141,6 +141,16 @@ class DownloadTests(unittest.TestCase):
             self.assertTrue(command[1].endswith('board_flash.py'))
             self.assertNotIn('--flash',command); self.assertNotIn('--apply',command)
 
+    def test_paired_update_routes_to_board_only_and_preserves_mode(self):
+        with tempfile.TemporaryDirectory() as t:
+            command=self.invoke(Path(t),['--klipper-update-only','--chip','stm32h723xx','--target-port','5-1','--target-serial','ABC']).call_args.args[1]
+            self.assertTrue(command[1].endswith('board_flash.py'))
+            self.assertIn('--klipper-update-only',command); self.assertNotIn('--apply',command)
+
+    def test_specialized_modes_cannot_be_combined(self):
+        with patch.object(bootstrap.sys,'platform','linux'),contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):
+            bootstrap.main(['--url','https://example.com/a.zip','--sha256','0'*64,'--configs','--klipper-update-only'])
+
     def test_peripheral_ssh_is_explicit_and_preserves_pid_argument(self):
         with tempfile.TemporaryDirectory() as t:
             execute=self.invoke(Path(t), ['--peripherals','--supervised-ssh','--ssh-session-pid','123','--apply'])

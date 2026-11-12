@@ -15,6 +15,10 @@ PROFILES={
 class FlashError(ValueError): pass
 
 
+class ProtocolError(FlashError):
+    """A positive protocol/dictionary mismatch, not a transport/write failure."""
+
+
 def profile(chip):
     if chip not in PROFILES: raise FlashError('Only verified Octopus F446/F429/H723 USB profiles are supported')
     return dict(PROFILES[chip],chip=chip,address=0x08000000+PROFILES[chip]['boot_kib']*1024)

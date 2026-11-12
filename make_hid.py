@@ -14,12 +14,12 @@ import shlex
 import zlib
 
 
-TAG = 'v0.6.2'
+TAG = 'v0.7.0'
 REPOSITORY = 'xt-programmer/autoprinter-installer'
 
 
 def invocation(mode, device, extra=(), vid=None, pid=None, serial=None):
-    if mode not in ('inventory', 'audit', 'peripherals', 'configs', 'board-flash', 'full'):
+    if mode not in ('inventory', 'audit', 'peripherals', 'configs', 'board-flash', 'klipper-update-only', 'full'):
         raise ValueError('Unknown launcher mode')
     if device not in ('flipper', 'digispark'):
         raise ValueError('Unknown keyboard device')
@@ -33,7 +33,7 @@ def invocation(mode, device, extra=(), vid=None, pid=None, serial=None):
         raise ValueError('Only printable ASCII arguments are supported')
     owned = {'--url','--sha256','--usb-port','--usb-vid','--usb-pid','--usb-serial',
              '--hid-vid','--hid-pid','--hid-serial','--hid-product', '--supervised-ssh',
-             '--ssh-session-pid', '--inventory','--peripherals','--configs','--board-flash'}
+             '--ssh-session-pid', '--inventory','--peripherals','--configs','--board-flash','--klipper-update-only'}
     if any(x.split('=', 1)[0] in owned for x in extra):
         raise ValueError('Mode/download/trigger options belong to the generator')
     if mode == 'inventory' and extra:
@@ -44,12 +44,14 @@ def invocation(mode, device, extra=(), vid=None, pid=None, serial=None):
     if mode != 'inventory':
         if device == 'flipper': flags += ['--hid-product', 'Supervised launcher']
         if serial is not None: flags += ['--hid-serial', serial]
-        if mode in ('peripherals', 'configs', 'board-flash'): flags += ['--' + mode]
+        if mode in ('peripherals', 'configs', 'board-flash', 'klipper-update-only'): flags += ['--' + mode]
     flags += extra
     if '--flash' in extra and not all(x in extra for x in ('--apply','--enable-flashing-capability','--maintenance-confirmed')):
         raise ValueError('Flash needs explicit apply, capability and maintenance flags')
     if '--apply' in extra and '--maintenance-confirmed' not in extra:
         raise ValueError('Apply needs --maintenance-confirmed')
+    if mode=='klipper-update-only' and '--apply' in extra and not all(x in extra for x in ('--enable-flashing-capability','--actuator-power-disconnected','--board-confirmed-octopus','--allow-bootloader-request')):
+        raise ValueError('Paired update apply needs capability, isolated power, confirmed board and bootloader-request flags')
     return flags,vid,pid
 
 
@@ -198,7 +200,7 @@ sys.exit(ns['launch'](r))
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument('--device', choices=['flipper','digispark'], required=True)
-    parser.add_argument('--mode', choices=['inventory','audit','peripherals','configs','board-flash','full'], default='inventory')
+    parser.add_argument('--mode', choices=['inventory','audit','peripherals','configs','board-flash','klipper-update-only','full'], default='inventory')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--execute', action='store_true', help='send Enter once after typing; default is review-only')
     parser.add_argument('--vid'); parser.add_argument('--pid'); parser.add_argument('--serial')

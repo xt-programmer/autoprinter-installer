@@ -35,6 +35,12 @@ class CombinedGuard:
     def check(self): self.parent.check(); self.target.check()
 
 
+def bootloader_request(runner,path):
+    # No controlling tty; ignore the expected hangup when USB re-enumerates.
+    code='import os,signal,fcntl,termios,struct; signal.signal(signal.SIGHUP,signal.SIG_IGN); fd=os.open('+repr(path)+',os.O_RDONLY|os.O_NOCTTY); fcntl.ioctl(fd,termios.TIOCMBIS,struct.pack("I",termios.TIOCM_DTR)); t=termios.tcgetattr(fd); t[4]=t[5]=termios.B1200; termios.tcsetattr(fd,termios.TCSANOW,t); fcntl.ioctl(fd,termios.TIOCMBIC,struct.pack("I",termios.TIOCM_DTR)); os.close(fd)'
+    return runner.run(['python3','-B','-c',code],timeout=10,check=False)[0]
+
+
 class Transaction:
     def __init__(self,guard,runner,state,inactive,identify,reset_board=None):
         self.guard,self.runner,self.state,self.inactive,self.identify=guard,runner,Path(state),inactive,identify
@@ -56,12 +62,14 @@ class Transaction:
             self.guard.cancelled.wait(.1)
         raise fp.FlashError('USB target did not return in the required mode; no retry/write will be attempted')
 
-    def execute(self,directory,device,expected_normal_serial=None,allow_request=False):
+    def execute(self,directory,device,expected_normal_serial=None,allow_request=False,require_recovery=False):
         metadata,p,dictionary=fp.artifact(directory); root=Path(directory)
         mode=eligibility(device,p['chip']); port=device['port']
         self.inactive(); self.guard.check()
         self.result.update(state='ELIGIBLE_NOT_YET_PROVEN',profile=p,source_commit=metadata['source_commit'],initial_usb=device)
         self.record()
+        if require_recovery and not mode.startswith('NORMAL_'):
+            raise fp.FlashError('Paired update requires normal Klipper identity before DFU; use board-flash for unflashed/initially DFU targets')
         if mode.startswith('NORMAL_'):
             if not allow_request: raise fp.FlashError('Normal-mode transition needs explicit bootloader-request opt-in')
             path=serial_path(device); expected_normal_serial=device['serial']
@@ -69,8 +77,7 @@ class Transaction:
             if self.result['before_identity']['config']['MCU']!=p['chip']: raise fp.FlashError('Live MCU identity contradicts build profile')
             self.record(); self.inactive(); self.guard.check()
             # The documented Klipper virtual-serial bootloader request. No flash command is sent here.
-            code='import os,signal,fcntl,termios,struct; signal.signal(signal.SIGHUP,signal.SIG_IGN); fd=os.open('+repr(path)+',os.O_RDONLY|os.O_NOCTTY); fcntl.ioctl(fd,termios.TIOCMBIS,struct.pack("I",termios.TIOCM_DTR)); t=termios.tcgetattr(fd); t[4]=t[5]=termios.B1200; termios.tcsetattr(fd,termios.TCSANOW,t); fcntl.ioctl(fd,termios.TIOCMBIC,struct.pack("I",termios.TIOCM_DTR)); os.close(fd)'
-            code_result,_=self.runner.run(['python3','-B','-c',code],timeout=10,check=False)
+            code_result=bootloader_request(self.runner,path)
             self.result['bootloader_request_exit']=code_result
             device=self.wait(port,lambda d:(d['vid'],d['pid'])==('0483','df11') and bool(d['serial']),20)
         self.result.update(state='DFU_ENTERED',dfu_usb=device)
@@ -93,6 +100,11 @@ class Transaction:
             sp,reset=struct.unpack_from('<II',raw)
             if not 0x20000000<=sp<=0x24080000 or not reset&1 or not 0x08000000<=reset-1<p['address']:
                 raise fp.FlashError('No valid existing bootloader vector; offset profile cannot make a blank MCU cold-boot')
+            if require_recovery:
+                offset=p['address']-0x08000000
+                sp,reset=struct.unpack_from('<II',raw,offset)
+                if not 0x20000000<=sp<=0x24080000 or not reset&1 or not p['address']<=reset-1<0x08000000+size:
+                    raise fp.FlashError('No valid prior application at the selected offset; cannot promise paired recovery')
             self.result.update(state='BACKED_UP',backup_sha256=fp.sha(raw),backup_bytes=size)
             self.record(); self.inactive(); target.check(); self.guard.check()
             self.result.update(state='WRITE_STARTED',firmware_write_started=True)
@@ -104,20 +116,21 @@ class Transaction:
             if len(actual)!=size or actual[offset:offset+len(binary)]!=binary: raise fp.FlashError('Firmware read-back verification failed')
             sectors=fp.flash_layout(selected[0]); end=max(b for a,b,mode in sectors if b>p['address'] and a<p['address']+len(binary))-0x08000000
             if actual[:offset]!=raw[:offset] or actual[end:]!=raw[end:]: raise fp.FlashError('Bootloader or flash outside application erase range changed')
-            self.result.update(state='READBACK_VERIFIED',readback_sha256=fp.sha(actual),bootloader_preserved=True)
+            self.result.update(state='READBACK_VERIFIED',readback_sha256=fp.sha(actual),bootloader_preserved=True,erase_end=end+0x08000000)
             self.record()
         finally: target.close()
         self.guard.check(); self.inactive()
         # DfuSe command mode: set application address and leave, without downloading again.
         leave_code,_=self.runner.run(args+['--dfuse-address','0x%x:leave'%p['address']],timeout=15,check=False)
         normal=self.wait(port,lambda d:d['vid']=='1d50' and d['pid']=='614e' and d['manufacturer']=='Klipper' and d['product']==p['chip'] and (not expected_normal_serial or d['serial']==expected_normal_serial) and bool(serial_path(d)),45)
+        self.result['observed_normal_usb']=normal
         identity=self.identify(serial_path(normal))
-        if identity!=dictionary: raise fp.FlashError('Running firmware dictionary differs from the built image')
+        if identity!=dictionary: raise fp.ProtocolError('Running firmware dictionary differs from the built image')
         if not self.reset_board: raise fp.FlashError('Require verified MCU reset/boot persistence before permitting a host update')
         self.reset_board(serial_path(normal))
         normal=self.wait(port,lambda d:d['vid']=='1d50' and d['pid']=='614e' and d['manufacturer']=='Klipper' and d['product']==p['chip'] and d['serial']==normal['serial'] and d['devnum']!=normal['devnum'] and bool(serial_path(d)),45)
         identity=self.identify(serial_path(normal))
-        if identity!=dictionary: raise fp.FlashError('Firmware did not survive an MCU reset with the selected bootloader offset')
+        if identity!=dictionary: raise fp.ProtocolError('Firmware did not survive an MCU reset with the selected bootloader offset')
         self.result['reset_boot_verified']=True
         self.result.update(state='VERIFIED',normal_usb=normal,after_identity=identity,leave_exit=leave_code)
         self.record(); return self.result

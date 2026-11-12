@@ -37,7 +37,7 @@ Read-only eligibility audit, replacing the target port/serial with the inspected
 Octopus values (do not use a probe's port/serial):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.2/install.sh | sudo sh -s -- --board-flash --chip stm32h723xx --target-port TARGET_PORT --target-serial TARGET_SERIAL
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.7.0/install.sh | sudo sh -s -- --board-flash --chip stm32h723xx --target-port TARGET_PORT --target-serial TARGET_SERIAL
 ```
 
 Actual programming additionally requires **all** of:
@@ -103,8 +103,10 @@ Transaction order:
 No services are automatically restarted by artifact mode. An application
 programming failure can leave the MCU requiring recovery; keeping old host
 software does not undo an incomplete firmware write. Original flash bytes,
-hashes, source retention and promotion intent remain available. There is no
-automatic firmware rollback or repeated download after failure/removal.
+hashes, source retention and promotion intent remain available. This artifact mode has no
+automatic firmware rollback or repeated download after failure/removal. The
+separate `--klipper-update-only` mode adds a bounded paired downgrade for
+positively detected protocol errors; see [KLIPPER-UPDATE.md](KLIPPER-UPDATE.md).
 
 Hardware validation: one H723 Octopus Pro application write was made on the
 USB-powered Orange Pi bench. Full flash backup/read-back, bootloader preservation,

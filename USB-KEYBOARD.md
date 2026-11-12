@@ -148,3 +148,12 @@ requested no-keyboard workflow.
 USB removal cannot instantly stop blocking kernel I/O, APT or a submitted flash
 write. Interrupted firmware may need recovery. Maintain supervision and actual
 actuator isolation for initial programming tests.
+
+For v0.7.0 the generator also accepts `--mode klipper-update-only`. This is
+the separate paired Klipper/Octopus transaction described in KLIPPER-UPDATE.md.
+Default audit still writes no firmware; apply implies the board write and host
+promotion, and requires capability, maintenance, isolated power, confirmed
+Octopus/profile and bootloader-request flags. The private kit's 06/07 scripts
+are tied to the inspected .170 H723 identity, not generic printer selectors.
+Keep its USB supervision and normal screen-return helper through the entire
+update/recovery. No monitor/worker is installed for later protocol errors.

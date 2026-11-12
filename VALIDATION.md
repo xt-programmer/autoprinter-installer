@@ -1,3 +1,21 @@
+# Validation record - v0.7.0
+
+12 November 2026: Klipper/board-only transaction and protocol-error downgrade.
+
+- Windows suite: 204 tests discovered; 200 passed, four POSIX-only skips.
+  Failure injection verifies DFU failure holds the host gate; one application
+  restoration exactly recovers the whole old flash; changed target, backup,
+  flash, or USB refuses recovery; firmware restoration precedes host restoration.
+- New startup checks exclude old log/API errors and cached process IDs, catch
+  fresh MCU protocol errors, preserve inactive services, and check safe idle
+  before stopping an active service. Unknown G-code is not a downgrade trigger.
+- KIAUH literal klipper.env parsing, external plugin retention/collision and
+  protocol formats derived from actual host source are covered. No shell
+  environment file is executed and no plugin dependency is updated.
+- The new paired downgrade has not been physically flashed. No new board write,
+  Pi reboot or config/GUI/radio/other-service change was made for this release.
+  Previous H723 full read-back/reset validation remains recorded below.
+
 # Validation record - v0.6.2
 
 12 November 2026: fix the automatic-console launcher leaving tty3 visible.
