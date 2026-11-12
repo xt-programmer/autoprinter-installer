@@ -14,7 +14,7 @@ import shlex
 import zlib
 
 
-TAG = 'v0.6.0'
+TAG = 'v0.6.1'
 REPOSITORY = 'xt-programmer/autoprinter-installer'
 
 

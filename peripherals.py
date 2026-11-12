@@ -20,6 +20,7 @@ import urllib.request
 import autoprinter as ap
 import peripheral_history as ph
 import config_profiles as cp
+import screen_runtime as sr
 from host_setup import SSHGuard
 
 HOME = Path('/home/pi')
@@ -29,7 +30,7 @@ PINS = {
     'KlipperScreen': ('https://github.com/KlipperScreen/KlipperScreen.git', '26d262522b9bd9fe7d67f67d3c6f90aa156d1b07', 'master'),
     'cartographer3d-plugin': ('https://github.com/Cartographer3D/cartographer3d-plugin.git', '7cb58488c45de64235c13f6c771e8a31903b1fb0', 'main'),
 }
-SCREEN_PACKAGES = 'xinit xinput x11-xserver-utils xserver-xorg-input-evdev xserver-xorg-input-libinput xserver-xorg-legacy xserver-xorg-video-fbdev libgirepository1.0-dev libcairo2-dev gir1.2-gtk-3.0 librsvg2-common libdbus-glib-1-dev autoconf libmpv2 dbus-x11 cmake libsystemd-dev'.split()
+SCREEN_PACKAGES = 'util-linux xinit xinput x11-xserver-utils xserver-xorg-input-evdev xserver-xorg-input-libinput xserver-xorg-legacy xserver-xorg-video-fbdev libgirepository1.0-dev libcairo2-dev gir1.2-gtk-3.0 librsvg2-common libdbus-glib-1-dev autoconf libmpv2 dbus-x11 cmake libsystemd-dev'.split()
 INCLUDE = 'autoprinter-peripherals.conf'
 
 
@@ -241,24 +242,30 @@ snapshot_url: /webcam/?action=snapshot
     def screen(self):
         source = self.source('KlipperScreen')
         env = HOME/'.KlipperScreen-env'
+        unit_path=Path('/etc/systemd/system/KlipperScreen.service')
+        unit=(source/'scripts/KlipperScreen.service').read_text()
+        for a,b in {'KS_USER':'pi','KS_ENV':str(env),'KS_DIR':str(source),'KS_BACKEND':'X'}.items(): unit=unit.replace(a,b)
+        drop=Path('/etc/systemd/system/KlipperScreen.service.d')
+        existing=[p.read_text() for p in drop.glob('*.conf')] if drop.exists() else []
+        # Validate before packages, stopping the UI or editing an environment.
+        runtime=sr.native_x11_override(unit_path.read_text() if unit_path.exists() else unit,unit,existing,(source/'scripts/launch_KlipperScreen.sh').exists())
+        if unit_path.exists(): self.run('systemctl','stop','KlipperScreen')
         self.run('apt-get', '-o', 'DPkg::Lock::Timeout=20', 'update', timeout=600)
         self.run('apt-get', '-s', '--no-remove', '--no-install-recommends', 'install', *SCREEN_PACKAGES)
         self.run('apt-get', '-o', 'DPkg::Lock::Timeout=20', '-o', 'Dpkg::Options::=--force-confold', '--yes', '--no-remove', '--no-install-recommends', 'install', *SCREEN_PACKAGES, timeout=2400)
         if not (env/'bin/python').exists():
             self.run('python3', '-m', 'venv', env, user='pi', env={'HOME':str(HOME)})
         self.run(env/'bin/python', '-m', 'pip', 'install', '--no-cache-dir', '-r', source/'scripts/KlipperScreen-requirements.txt', user='pi', env={'HOME':str(HOME)}, timeout=1800)
+        self.run(env/'bin/python','-m','pip','check',user='pi')
         self.run(env/'bin/python', '-c', 'import gi; gi.require_version("Gtk","3.0"); from gi.repository import Gtk; import mpv,jinja2,requests,sdbus,psutil,websocket', user='pi')
-        if not Path('/etc/systemd/system/KlipperScreen.service').exists():
+        if not unit_path.exists():
             self.run('groupadd', '-f', 'klipperscreen')
             self.run('usermod', '-a', '-G', 'klipperscreen,tty,video', 'pi')
-            unit = (source/'scripts/KlipperScreen.service').read_text()
-            for a,b in {'KS_USER':'pi', 'KS_ENV':str(env), 'KS_DIR':str(source), 'KS_BACKEND':'X'}.items():
-                unit = unit.replace(a,b)
-            self.write(Path('/etc/systemd/system/KlipperScreen.service'), unit)
+            self.write(unit_path, unit)
             self.write(Path('/etc/X11/Xwrapper.config'), 'allowed_users=anybody\nneeds_root_rights=yes\n')
-        drop = Path('/etc/systemd/system/KlipperScreen.service.d')
         drop.mkdir(exist_ok=True)
         self.write(drop/'display-presence.conf', "[Service]\n# Skip headless DRM startup; avoid an X restart loop.\nExecCondition=/bin/sh -c 'grep -qx connected /sys/class/drm/*/status'\n")
+        self.write(drop/'autoprinter-x11.conf',runtime)
         policy=Path('/etc/polkit-1/rules.d/KlipperScreen.rules')
         if not policy.exists():
             self.write(policy,'''polkit.addRule(function(action, subject) {
@@ -309,6 +316,31 @@ managed_services: klipper
 ''')
         self.report['cartographer'] = 'PLUGIN_INSTALLED_CONFIG_AND_CALIBRATION_REQUIRED'
 
+    def verify_screen(self,checkpoint):
+        displays=[p for p in Path('/sys/class/drm').glob('*/status') if ap.read(p)=='connected']
+        if not displays:
+            self.report['screen_runtime']={'state':'HEADLESS_PHYSICAL_VALIDATION_PENDING'}
+            return
+        pid=None
+        try:
+            for sample in range(11):
+                self.guard.check()
+                _,text=self.run('systemctl','show','KlipperScreen','-p','ActiveState','-p','SubState','-p','MainPID','-p','NRestarts')
+                pid=sr.check_service(text,pid)
+                if sample<10: self.guard.cancelled.wait(2)
+            logfile=HOME/'printer_data/logs/KlipperScreen.log'
+            stat=logfile.stat()
+            start=checkpoint[1] if checkpoint and stat.st_ino==checkpoint[0] and stat.st_size>=checkpoint[1] else 0
+            with logfile.open('r',encoding='utf-8',errors='replace') as stream:
+                stream.seek(start); fresh=stream.read(512*1024)
+            sr.check_startup_log(fresh)
+            self.report['screen_runtime']={'state':'GUI_STARTED_STABLE','main_pid':pid,'stable_seconds':20,'restarts':0,'fresh_panel_log_verified':True,'physical_touch_check':'pending'}
+        except ap.Removed:
+            raise
+        except (OSError,ValueError,ap.Refuse) as error:
+            if not self.guard.cancelled.is_set(): self.run('systemctl','stop','KlipperScreen')
+            raise ap.Refuse('KlipperScreen runtime verification failed; UI stopped to avoid a restart loop: '+str(error))
+
     def finish(self):
         include = '# Managed peripheral registrations. No printer hardware configuration.\n'+'\n'.join(self.sections)
         self.write(CONFIG/INCLUDE, include, user=True)
@@ -317,7 +349,12 @@ managed_services: klipper
             self.write(CONFIG/'moonraker.conf', self.original_moonraker.rstrip()+'\n\n'+marker+'\n', user=True, mode=0o640)
         self.run('systemctl', 'daemon-reload')
         self.run('systemctl', 'enable', 'KlipperScreen')
+        logpath=HOME/'printer_data/logs/KlipperScreen.log'
+        stat=logpath.stat() if logpath.exists() else None
+        checkpoint=(stat.st_ino,stat.st_size) if stat else None
+        self.run('systemctl','reset-failed','KlipperScreen')
         self.run('systemctl', 'start', 'KlipperScreen')
+        self.verify_screen(checkpoint)
         if self.report['install']['usb_webcam']:
             self.run('systemctl', 'enable', 'crowsnest')
             if self.report.get('camera_present') or self.report.get('preserve_existing_camera_config'):

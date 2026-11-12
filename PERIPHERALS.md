@@ -41,7 +41,14 @@ or reboot follows interruption.
 Behavior:
 
 - KlipperScreen uses the upstream source, dependencies, native environment
-  `~/.KlipperScreen-env`, service template and X11 start script. This avoids
+  `~/.KlipperScreen-env`, service template and a reviewed native X11 drop-in. Xorg binds tty7 and the
+  Python GUI drops inherited/ambient capabilities before glycin loads images;
+  its image sandbox stays enabled. Custom launch/backends/drop-ins require
+  review. KlipperScreen stops before environment updates; connected displays
+  require a stable PID/no restarts for 20 seconds plus fresh panel startup logs.
+  Startup failure stops the GUI and reports incomplete, with bounded restarts.
+  The physical Orange Pi display was repaired and operator-confirmed stable.
+  This avoids
   replacing networking with NetworkManager or installing optional language
   fonts/development-only mpv packages. The unit skips headless DRM startup;
   connect a display and `sudo systemctl start KlipperScreen` to test it. Legacy

@@ -36,3 +36,10 @@ v0.5 firmware/HID references checked 12 November 2026:
 - [Flipper script commands](https://developer.flipper.net/flipperzero/doxygen/badusb_file_format.html)
 - [Flipper USB/file transfer/layout instructions](https://docs.flipper.net/zero/bad-usb)
 - [Digispark DigiKeyboard source](https://github.com/digistump/DigisparkArduinoIntegration/tree/master/libraries/DigisparkKeyboard)
+
+v0.6.1 display-runtime references:
+
+- [Bubblewrap capability refusal](https://github.com/containers/bubblewrap/blob/main/bubblewrap.c)
+- [Bubblewrap ambient-capability issue](https://github.com/containers/bubblewrap/issues/380)
+- [pam_systemd local-session capabilities](https://www.freedesktop.org/software/systemd/man/latest/pam_systemd.html)
+- [setpriv capability options](https://man7.org/linux/man-pages/man1/setpriv.1.html)

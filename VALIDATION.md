@@ -1,4 +1,30 @@
-# Validation record - v0.6.0
+# Validation record - v0.6.1
+
+12 November 2026: actual HDMI/touchscreen startup repair on the Orange Pi bench.
+
+- Native service was crashing while glycin/bubblewrap inherited CAP_WAKE_ALARM
+  from the local session; the repeat service start disturbed the display.
+  Standalone SVG and full Xvfb GUI tests passed, demonstrating the earlier
+  software-only tests were insufficient for this physical startup path.
+- Backups retained before service edits. Clear inheritable/ambient caps only
+  for the Python GUI, retain image sandboxing and normal Xorg privileges, bind
+  Xorg to the same tty7 as its service and bound retries. No global security,
+  package, printer config, firmware, motor/heater or Pi reboot changes.
+- Real 1024x600 GUI rendered and connected to Moonraker; process stable with
+  zero restarts and zero GUI client Inh/Eff/Amb caps. Canonical managed drop-in
+  passed a controlled service restart and 20-second fresh-panel verification.
+  User confirmed the physical screen stable, showing Klipper disconnected.
+  Klipper remains intentionally inactive/missing printer.cfg. Touch not tested.
+- Windows: 170 discovered, 166 passed, four POSIX-only skips. New tests cover
+  native/custom launch adoption, edited drop-in refusal, scoped cap clearing,
+  matching VT, bounded retries, PID/restart detection, fresh render log checks,
+  headless pending status, guarded stop on startup failure, cancellation without
+  follow-up stop and full-readiness stability with retained past restart count.
+- Fresh full-stack units get the same client command; adopted full-stack units
+  remain preserved and use the native accessory repair path when appropriate.
+  The complete full-stack apply and touch interaction remain separate tests.
+
+# Earlier validation record - v0.6.0
 
 12 November 2026: automatic private BadUSB console login without a resident
 worker, manual Enter, pre-login, autologin policy or sudoers modification.

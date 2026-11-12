@@ -25,12 +25,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download and run published inventory command
-        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sh -s -- --inventory
+        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sh -s -- --inventory
       - name: Download and plan bundled Cartographer configs without writing
-        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sh -s -- --configs --printer-profile cartographer
+        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sh -s -- --configs --printer-profile cartographer
       - name: Verify the published temporary console helper
         run: |
-          curl --proto '=https' --proto-redir '=https' -fsSL -o console-launch.py https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.6.0/console-launch.py
-          curl --proto '=https' --proto-redir '=https' -fsSL -o console-launch.py.sha256 https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.6.0/console-launch.py.sha256
+          curl --proto '=https' --proto-redir '=https' -fsSL -o console-launch.py https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.6.1/console-launch.py
+          curl --proto '=https' --proto-redir '=https' -fsSL -o console-launch.py.sha256 https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.6.1/console-launch.py.sha256
           sha256sum --check console-launch.py.sha256
           python -m py_compile console-launch.py

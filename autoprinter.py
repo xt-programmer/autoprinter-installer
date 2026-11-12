@@ -29,8 +29,9 @@ import urllib.request
 import zipfile
 import config_profiles as cp
 import flash_policy as fp
+import screen_runtime as sr
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 REPOS = {
@@ -43,7 +44,7 @@ SERVICES = ("moonraker", "klipper", "KlipperScreen")
 BASE_PACKAGES = ["git", "python3-venv", "python3-dev", "build-essential", "libffi-dev",
                  "libssl-dev", "libjpeg-dev", "zlib1g-dev", "libsodium-dev", "liblmdb-dev",
                  "libopenjp2-7", "curl", "nginx", "rfkill", "iproute2", "kbd"]
-SCREEN_PACKAGES = ["xinit", "xinput", "x11-xserver-utils", "xserver-xorg-core",
+SCREEN_PACKAGES = ["util-linux", "xinit", "xinput", "x11-xserver-utils", "xserver-xorg-core",
                    "xserver-xorg-input-libinput", "xserver-xorg-legacy", "libcairo2-dev",
                    "pkg-config", "gir1.2-gtk-3.0", "python3-gi", "python3-gi-cairo",
                    "librsvg2-common", "libdbus-glib-1-dev", "dbus-x11"]
@@ -1019,6 +1020,7 @@ class Installer:
             self.command("groupadd", "--force", "klipperscreen")
             self.command("usermod", "-a", "-G", "tty,video,render,klipperscreen", "pi")
             screen = "[Unit]\nDescription=KlipperScreen\nAfter=systemd-user-sessions.service systemd-logind.service moonraker.service\nWants=dbus.socket\nConditionPathExists=/dev/tty0\n[Service]\nType=simple\nUser=pi\nSupplementaryGroups=klipperscreen\nWorkingDirectory=/home/pi/KlipperScreen\nEnvironment=\"KS_XCLIENT=/home/pi/.KlipperScreen-env/bin/python /home/pi/KlipperScreen/screen.py\" BACKEND=X\nExecStart=/home/pi/KlipperScreen/scripts/KlipperScreen-start.sh\nPAMName=login\nTTYPath=/dev/tty7\nTTYReset=yes\nTTYVHangup=yes\nTTYVTDisallocate=yes\n"
+            screen=screen.replace('[Unit]\n','[Unit]\nStartLimitIntervalSec=120\nStartLimitBurst=3\n',1).replace('ExecStart=/home/pi/KlipperScreen/scripts/KlipperScreen-start.sh','ExecStart='+sr.X11_EXEC)
             self.unit("KlipperScreen", screen + common)
         self.install_nginx()
         self.command("systemctl", "daemon-reload", timeout=30)
@@ -1132,6 +1134,20 @@ class Installer:
         self.guard.check()
         self.change("Set verified status LED green")
 
+    def verify_screen_service(self):
+        pid=restarts=None
+        try:
+            for sample in range(11):
+                self.guard.check()
+                _,text=self.command('systemctl','show','KlipperScreen','-p','ActiveState','-p','SubState','-p','MainPID','-p','NRestarts',timeout=15)
+                if restarts is None:
+                    props=dict(line.split('=',1) for line in text.splitlines() if '=' in line)
+                    restarts=int(props['NRestarts'])
+                pid=sr.check_service(text,pid,restarts)
+                if sample<10: self.guard.cancelled.wait(2)
+        except (ValueError,KeyError) as error: raise Refuse('KlipperScreen is not stable: '+str(error)) from error
+        self.report['screen_runtime']={'state':'SERVICE_STABLE','main_pid':pid,'stable_seconds':20,'observed_restarts':0,'prior_restarts':restarts}
+
     def verify_ready(self):
         try:
             planned=cp.plan(self.data/'config',self.c.get('printer_profile','auto'))
@@ -1145,6 +1161,7 @@ class Installer:
         for service in ("klipper", "moonraker", "KlipperScreen"):
             if self.systemd_state(service).get("ActiveState") != "active":
                 raise Refuse("Required service is not active: " + service)
+        self.verify_screen_service()
         deadline = time.monotonic() + 90
         last = ""
         while time.monotonic() < deadline:

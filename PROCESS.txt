@@ -1,4 +1,4 @@
-AUTOPRINTER - IMPLEMENTED PROCESS, v0.6.0
+AUTOPRINTER - IMPLEMENTED PROCESS, v0.6.1
 Updated: 12 November 2026
 
 This describes the code that exists now. It distinguishes separate entry points;
@@ -26,7 +26,7 @@ Linux Python 3.9+ and the target's base command-line utilities must already exis
 Normal user/layout: pi, /home/pi, /home/pi/printer_data, Linux/systemd.
 
 Single-command launcher:
-  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s --
+  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sudo sh -s --
 
 No options: download the release and run read-only hardware inventory.
 --peripherals: route to the accessory entry point; audit is the default.
@@ -304,6 +304,24 @@ Apply order:
    upstream service/start script. Preserve networking; no NetworkManager
    takeover. Apply the DRM-display presence condition to avoid headless X
    restart loops. Enable the service; physical display testing is separate.
+   v0.6.1 native X11 correction: compare launch-critical service fields with
+   the pinned native template before packages/UI stop/environment edits. Custom
+   backends, launch scripts and conflicting/edited drop-ins require review.
+   Stop KlipperScreen before updating its Python environment; verify pip check.
+   Install autoprinter-x11.conf: Xorg and service use tty7; only the Python GUI
+   client runs through setpriv --inh-caps=-all --ambient-caps=-all. This removes
+   locally inherited CAP_WAKE_ALARM so glycin/bubblewrap retains its sandbox.
+   No global capability/AppArmor/pam or image-sandbox bypass is applied. Bound
+   restart attempts to 3 per 120 seconds with 10-second delay.
+   Reset the startup counter and record log checkpoint before start. With a
+   connected DRM display, require one active/running PID, zero startup restarts
+   over 20 seconds and fresh resolution/panel logs without rendering exceptions.
+   Failure stops only KlipperScreen while supervision remains; cancellation
+   never authorizes another stop. Headless explicitly reports physical checks
+   pending. The full-stack readiness path also observes PID/restart stability;
+   newly created full-stack X11 units use the same cap-cleared client command.
+   Adopted full-stack units remain preserved; native repair is accessory mode.
+
 7. Cartographer: install only for a current OR positively retained named probe.
    Generic Klipper or STM32 DFU VID/PID is insufficient; the Octopus and probe
    can share VID/PID. Use explicit manufacturer/product/serial-by-id or named
@@ -502,3 +520,21 @@ Flipper Done means keystrokes finished only. Identical language/layout does
 not prove every console/login/timing state; physical testing is still needed.
 ATtiny uses PROGMEM and USB polling rather than repeating commands; compile
 with the actual board/core/library and check available flash/RAM before use.
+
+12. PHYSICAL KLIPPERSCREEN REPAIR VALIDATION, 12 NOVEMBER 2026
+------------------------------------------------------------
+On the writable Orange Pi bench, connecting the 1024x600 HDMI/touch screen
+exposed a repeat GUI startup crash: glycin's bubblewrap rejected inherited
+CAP_WAKE_ALARM (0x0000000800000000). Generic SVG and a full virtual-display GUI
+test passed, so pip/import/Xvfb-only checks had missed the local-session failure.
+The original Xorg auto-selected tty2 while the service also switched to tty7.
+Backups: /var/lib/autoprinter/screen-repair-20261112T145217Z/.
+After the scoped cap-cleared Python client plus tty7 binding, real GUI startup,
+Moonraker connection, zero client ambient/inheritable/effective caps and stable
+PID with zero restarts passed. Canonical managed drop-in survived a controlled
+service restart and 20-second fresh-start verification. A root-window capture
+showed the rendered GUI, and the user confirmed the physical screen stable.
+No package, firmware, printer config, heater/motor or Pi-reboot change was used.
+Klipper remains inactive without printer.cfg; its disconnected page is expected.
+Touch response has not been tested. The temporary diagnostic PATH override was
+removed. There is no new AutoPrinter worker or insertion listener.
