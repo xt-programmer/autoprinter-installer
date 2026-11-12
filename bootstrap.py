@@ -193,6 +193,12 @@ def main(argv=None):
     identity = None
     if args.usb_port:
         device, identity = resolved_hid or usb_identity(args.usb_port, args.usb_vid, args.usb_pid, args.usb_serial)
+        inherited = os.environ.get('AUTOPRINTER_TRIGGER_SESSION')
+        if inherited:
+            session={'port':args.usb_port,'vid':identity['idVendor'],'pid':identity['idProduct'],
+                     'serial':identity['serial'],'busnum':identity['busnum'],'devnum':identity['devnum']}
+            if json.loads(inherited)!=session:
+                raise RuntimeError('USB trigger changed before downloader startup')
         presence = Presence(device, identity).start()
     check = presence.check if presence else lambda: None
     try:

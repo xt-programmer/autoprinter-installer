@@ -1,145 +1,136 @@
-# Run AutoPrinter from a Flipper Zero or ATtiny keyboard
+# Automatic USB launch — no resident worker
 
-Use a **direct USB connection to the target Pi**, a monitor, and an already
-logged-in `pi` terminal for the first tests. This launcher types the pinned
-v0.5.0 Linux download command; the Pi downloads and runs the installer. The
-keyboard does not carry the installer files. Ethernet/internet, Python 3.9+,
-curl, bash and working sudo must already be available.
+v0.6 adds automatic Linux-console login to BadUSB. A prepared Flipper payload
+or suitable ATtiny keyboard switches to a spare console, logs in as `pi`,
+downloads the installer and executes its reviewed arguments. **No keyboard or
+Enter on the printer, and no AutoPrinter service, worker, udev trigger rule,
+sudoers change or autologin setup is needed.**
 
-A keyboard cannot log in to an unknown image, inspect the screen, discover a
-password, or verify heater/motor isolation. There is no login automation, stored
-password, autorun service, reboot/resume task or background installation here.
-The public manifest still needs machine-specific files/settings before a full
-installation. Successful inventory is not a complete installation.
+The target still needs its normal USB keyboard/virtual-console support, Python
+3.9+, curl, sudo and internet. The Orange Pi reference uses US/pc105 mapping,
+Bash, has `/dev/tty3` with no logged-in session and a normal getty template.
+The operator confirms the other Pis use the same keyboard/language. A
+touchscreen's lack of typing controls does not prevent Linux receiving USB HID.
 
-## First Flipper tests
+BadUSB sends blind keys: **tty3 must initially be a fresh login prompt**, rather
+than a logged-in shell, application, autologin session or locked GUI. Switching
+VT starts the image's existing console login. No forced interrupt, reboot,
+logout of an unknown session or guessed prompt recovery is attempted. Actual
+Flipper delivery still needs testing; SSH inspection does not prove hotkey/HID
+delivery on every image.
 
-1. Copy `hid/flipper/*.txt` from the release to the Flipper's **SD Card/badusb/**
-   using qFlipper or the mobile app. Close qFlipper before using Bad USB.
-2. On the Pi, log in as `pi`, open a terminal/console, and manually run `sudo -v`.
-   Enter the Pi's password yourself if asked. Leave a clean shell prompt focused.
-   The payload uses `sudo -n`, which refuses expired/missing authorization instead
-   of typing into a password prompt. Repeat `sudo -v` before each later test.
-3. On Flipper select **Bad USB → 01-inventory-review.txt**, choose **USB** mode,
-   and match its keyboard layout to the Pi's active layout. Use a data USB cable
-   into the Pi's USB host port, then press **Run**.
-4. It waits two seconds, types slowly, and **does not press Enter**. Check that the
-   command begins `bash -o pipefail -c`, has the v0.5.0 GitHub URL, and ends with
-   the exit-status display. Check quotes, slashes, hyphens and pipe characters.
-   If wrong, clear the line and correct the layout. If correct, press Enter on
-   a normal keyboard. Inventory downloads code and reads hardware; it does not
-   install packages, change configs/services/radios, or interact with MCU serial.
-5. After inventory finishes, run **02-audit-review.txt** the same way. The
-   downloader must report `HID trigger resolved to physical port ...`. It binds
-   the exact device enumeration for the audit. **03-peripherals-plan-review.txt**
-   then shows current/historical webcam, Cartographer and config decisions.
-6. Keep the Flipper connected and the selected Bad USB script open until the
-   **Pi** reports the result and returns to its shell. A Flipper “Done” means
-   typing finished; it does not mean installation finished. Leaving the app,
-   selecting another script, reconnecting or changing USB mode can cancel work.
+## Insertion-only Flipper tests
 
-`01-inventory-run.txt` and `02-audit-run.txt` send Enter once. Use these only
-after the corresponding review test works. They never inject another command
-after starting the installer. There is no fixed “wait 30 minutes then reboot.”
+1. Copy your **privately generated** automatic `.txt` files to **SD Card/badusb/**
+   using qFlipper/mobile app; then close qFlipper.
+2. With USB **disconnected**, select the payload in Bad USB, choose **USB** mode
+   and **US** layout. Press **Run while disconnected** to arm run-on-connect,
+   then insert its data cable into the target Pi's USB host port. No Pi action
+   is required. Arm it again before each new connection; stock Flipper is not a
+   permanently auto-armed ATtiny.
+3. Start with automatic inventory, then audit/peripheral plan. Select apply
+   only after its machine settings and arguments have been reviewed.
+4. Keep the cable connected and the same Bad USB script open until the **Pi**
+   finishes. Flipper **Done means typing finished**, not installation finished.
+   Changing script/app/mode or reconnecting can cancel maintenance.
 
-These are the official Flipper [text script commands](https://developer.flipper.net/flipperzero/doxygen/badusb_file_format.html)
-and [file transfer/USB/layout steps](https://docs.flipper.net/zero/bad-usb).
-Physical Flipper and ATtiny keystroke execution remains a bench test; automated
-tests check payload generation and Linux USB-selection/cancellation policies.
+Official sources: [script commands](https://developer.flipper.net/flipperzero/doxygen/badusb_file_format.html),
+[USB/layout/file transfer](https://docs.flipper.net/zero/bad-usb), and
+[run-on-connect implementation](https://github.com/flipperdevices/flipperzero-firmware/blob/dev/applications/main/bad_usb/helpers/ducky_script.c).
+No custom Flipper firmware is required.
 
-## The trigger and its limits
+## Automatic sequence
 
-Every supplied Flipper script starts with:
+Wait for USB; send Ctrl+Alt+F3; wait five seconds; type `pi`; wait 2.5 seconds;
+type the supplied password; wait twelve seconds for the shell. Disable history
+for this temporary shell, transfer a compact capsule in short lines, then run
+it with Enter. There is no manual login or sudo confirmation on the printer.
 
-```text
-ID 1234:abcd AutoPrinter:Supervised launcher
-```
+Before sudo, check exact user/tty, require exactly one matching HID and capture
+its port/VID/PID/serial/bus/enumeration. Download a SHA-256-pinned temporary
+helper with USB checks during transfer. The helper fetches the tag-pinned
+installer, optionally checks its additional SHA-256, and supplies sudo's password
+through a private pipe. It does not guess when sudo prompts. The frozen USB
+session passes through sudo into the root downloader/installer; intervening
+re-enumeration refuses. The normal removal/cancellation guard remains in force.
 
-This is a local bench selector using the documentation's example VID/PID, not a
-registered product assignment or authentication credential. Maintenance commands
-match `--hid-vid 1234 --hid-pid abcd --hid-product 'Supervised launcher'` and require
-**exactly one connected matching HID interface**. No match or multiple matches
-refuses before download. Optional `--hid-serial` adds an exact serial match.
-For a deployed custom device use its properly assigned USB IDs.
+No later keys enter a running installer. Output goes to console and
+`/home/pi/printer_data/logs/autoprinter-console-*.log` (up to 8 MiB per log).
+Root reports/backups remain under `/var/lib/autoprinter/`. When finished, show
+the exit status for fifteen seconds and log out, preparing tty3 for the next
+insertion. The temporary helper ends with the job. It installs no listener or
+startup/resume task and does not automatically reboot/start printer services.
+Earlier optional peripheral-history rules are a separate accessory feature;
+this launch mechanism neither adds nor depends on them.
 
-The selected trigger's physical port, VID, PID, serial, bus and enumeration
-number are frozen and passed into the existing removal guard. Unplug/replug
-latches cancellation. HID discovery selects only the maintenance trigger;
-Octopus selection remains an independently explicit port/serial/chip decision.
-USB descriptors can be imitated; supervision comes from the operator.
+## Generate private payloads
 
-Use only one launcher at a time. A webcam/probe/Octopus that may reset is not a
-maintenance trigger. Removal cannot guarantee an instantaneous stop of blocking
-kernel I/O or an already submitted firmware write. Keep actuator power isolated
-for the initial programming tests and retain the recovery backups.
+The login password is plaintext in the keystrokes and recoverable from the
+capsule. Keep generated login files private; they are excluded from the public
+release. The generator never prints the credential or encoded command.
 
-## Generate a reviewed installation payload
-
-Run `make_hid.py` on the preparation computer from the extracted release. On
-Windows use `python` instead of `python3`. Output paths must not already exist.
-Default output types the command without Enter. Add `--execute` to send it once.
-
-Accessory apply example for a reviewed **manual-Z** native KIAUH installation:
+On the preparation computer, put the `pi` password in a one-line local file.
+From the extracted release (Windows may use `python` instead of `python3`):
 
 ```sh
-python3 make_hid.py --device flipper --mode peripherals --output accessory-apply.txt -- --apply --maintenance-confirmed --printer-profile manual-z
+python3 make_hid.py --device flipper --console-login --password-file pi-password.txt --mode inventory --output auto-inventory.txt
+python3 make_hid.py --device flipper --console-login --password-file pi-password.txt --mode audit --output auto-audit.txt
+python3 make_hid.py --device flipper --console-login --password-file pi-password.txt --mode peripherals --output auto-peripheral-plan.txt
 ```
 
-Choose `cartographer` for a reviewed Cartographer printer, or `auto` when its
-existing config is unambiguous. Accessory apply requires inactive Klipper and
-at least 3 GiB free. Ubuntu 26.04 additionally needs the explicit experimental
-flag `--experimental-ubuntu-26-04`. Webcam/Cartographer conditions still apply;
-this mode never flashes, updates Klipper itself or changes Wi-Fi.
+`--console-login` includes automatic login and Enter. Default console is tty3;
+`--vt 2` through `--vt 6` selects a different **known fresh** spare console.
+Output files must not already exist. `--launcher-sha256` adds a pin for the
+tag's install.sh; the ready private test kit includes that pin.
 
-Full installation with a completed local machine manifest:
+Accessory apply on an inspected native KIAUH installation:
 
 ```sh
-python3 make_hid.py --device flipper --mode full --output machine-apply.txt -- --config /home/pi/autoprinter/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
+python3 make_hid.py --device flipper --console-login --password-file pi-password.txt --mode peripherals --output auto-accessories.txt -- --apply --maintenance-confirmed --printer-profile auto
 ```
 
-Capability alone does not request flashing. In full mode a healthy installed
-Klipper is retained unless a requested board flash reaches VERIFIED. Firmware
-programming requires `--flash` plus the complete reviewed board profile and
-isolation/safety gates. See [BOARD-FLASH.md](BOARD-FLASH.md). Do not reuse one
-printer's board serial or pin configuration on another printer.
+Klipper must already be inactive and at least 3 GiB free. Missing/ambiguous
+printer type refuses; select a reviewed `manual-z`/`cartographer` when needed.
+Ubuntu 26.04 additionally needs `--experimental-ubuntu-26-04`. This mode handles
+conditional webcam/Cartographer/KlipperScreen and macro/settings files. It never
+updates Klipper itself, flashes, or changes Wi-Fi.
 
-Artifact-mode flash audit example (replace the inspected Octopus values):
+Full maintenance requires a completed local machine manifest:
 
 ```sh
-python3 make_hid.py --device flipper --mode board-flash --output board-audit.txt -- --chip stm32h723xx --target-port TARGET_PORT --target-serial TARGET_SERIAL
+python3 make_hid.py --device flipper --console-login --password-file pi-password.txt --mode full --output auto-maintain.txt -- --config /home/pi/autoprinter/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
 ```
 
-No generated payload supplies actuator/isolation confirmations for you. For an
-actual write add all flags documented in BOARD-FLASH.md yourself. There is no
-generic “flash any board attached” payload.
+OS/layout, Ethernet, storage, idle/isolation, file/version and board checks remain.
+Missing settings/configs cause a reported refusal, not guessed pins/calibration
+or an interactive question. The bench still lacks printer.cfg and currently has
+less than 3 GiB free. Software/config changes may intentionally leave services
+stopped for commissioning. Automatic launch does not assert display/machine
+confirmations. `--enable-flashing-capability` alone never writes; actual writes
+need `--flash` and [BOARD-FLASH.md](BOARD-FLASH.md)'s independent target/profile
+gates. A healthy Klipper is held unless the requested board write verifies.
 
-## ATtiny85 / Digispark
+## Trigger / ATtiny / existing-shell alternatives
 
-`hid/digispark/AutoPrinterInventory/AutoPrinterInventory.ino` is a one-shot
-DigiKeyboard sketch. It waits five seconds, types inventory, leaves Enter to
-the operator, then continues polling USB without typing again. The command is
-stored in AVR flash with PROGMEM rather than the ATtiny85's small RAM.
+Flipper scripts use `ID 1234:abcd AutoPrinter:Supervised launcher`, a local bench
+selector based on the documentation's example. Match exact VID/PID/product,
+optionally serial, and exactly one HID. Freeze its physical enumeration. USB
+descriptors select presence, not authentication or MCU identity. Keep the trigger
+separate from boards that reset; use properly assigned IDs in a product.
 
-Generate an audit sketch with the **actual running keyboard** firmware IDs:
+For ATtiny/Digispark the generator also accepts `--device digispark` together
+with `--console-login`. It runs once on insertion and polls USB afterward,
+without repeating. Use its actual keyboard VID/PID via `--vid/--pid`; upstream
+defaults are 16c0:27db, which some clones/bootloaders change. The command chunks
+use PROGMEM. Compile with the actual board/core/library and check flash/RAM;
+automatic-login compilation and physical delivery remain pending. Use a larger
+HID board if a particular ATtiny core has insufficient usable flash.
 
-```sh
-python3 make_hid.py --device digispark --mode audit --vid 16c0 --pid 27db --output AutoPrinterAudit.ino
-```
+Earlier `hid/flipper/*-review.txt` and `*-run.txt` files remain **existing-shell**
+alternatives. They do not log in. Without `--console-login` the generator still
+defaults to manual Enter. Use the new private automatic-console files for the
+requested no-keyboard workflow.
 
-The defaults match the upstream [Digispark keyboard usbconfig](https://github.com/digistump/DigisparkArduinoIntegration/blob/master/libraries/DigisparkKeyboard/usbconfig.h);
-clones/other libraries may differ. Use inventory to inspect yours. The bootloader
-USB identity can differ from the keyboard identity. Compile/upload using the
-matching Digispark board/core and DigiKeyboard library; verify flash/RAM usage
-and US keyboard mapping. No compiled ATtiny firmware is supplied or claimed
-tested here. A plain ATtiny without suitable USB hardware/firmware is not a USB
-keyboard, and neither a Digispark nor Flipper Bad USB acts as installer storage.
-
-## Headless Pis
-
-Bad USB needs a focused, logged-in console on the same Pi. Plugging Flipper into
-a laptop while its SSH window is focused does not put that HID on the Pi; the
-HID selector correctly refuses there. For a headless first test, manually run
-the normal inventory command over SSH. Specialized apply modes support the
-separate explicit `--supervised-ssh --ssh-session-pid "$$"` guard, as documented
-in their guides. Do not combine SSH supervision with HID/USB selectors. Prepare
-a console once on a cloned image before attempting a keyboard-only workflow.
+USB removal cannot instantly stop blocking kernel I/O, APT or a submitted flash
+write. Interrupted firmware may need recovery. Maintain supervision and actual
+actuator isolation for initial programming tests.

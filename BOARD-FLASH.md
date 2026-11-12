@@ -37,7 +37,7 @@ Read-only eligibility audit, replacing the target port/serial with the inspected
 Octopus values (do not use a probe's port/serial):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --board-flash --chip stm32h723xx --target-port TARGET_PORT --target-serial TARGET_SERIAL
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s -- --board-flash --chip stm32h723xx --target-port TARGET_PORT --target-serial TARGET_SERIAL
 ```
 
 Actual programming additionally requires **all** of:

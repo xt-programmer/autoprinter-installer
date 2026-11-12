@@ -1,4 +1,26 @@
-# Validation record - v0.5.0
+# Validation record - v0.6.0
+
+12 November 2026: automatic private BadUSB console login without a resident
+worker, manual Enter, pre-login, autologin policy or sudoers modification.
+
+- Windows: 160 discovered, 156 passed, four POSIX-only skips. Linux CI runs all
+  tests on Python 3.9/3.12/3.14. New tests cover exact tty/pi checks, credential
+  input validation, private sudo pipe, stale enumeration before root/network,
+  hash failure before sudo, argument restrictions, automatic Enter/hotkey,
+  bounded capsule lines, deterministic helper bytes, no credential output,
+  one-shot Digispark generation and no keystrokes after process start.
+- Read-only SSH inspection of the authorized Orange Pi confirms US/pc105
+  mapping, Bash, /dev/tty3 present with no login session and a normal getty
+  template. No AutoPrinter worker/service/udev launch rule was installed.
+- Physical Flipper login/hotkey delivery and ATtiny compilation/delivery remain
+  untested. A fresh spare getty/login prompt is required; blind keystrokes
+  cannot safely identify arbitrary existing console state. Stock Flipper's
+  run-on-connect is supported by its official source, not tested on a device.
+- Firmware and host transaction logic remains the v0.5 validated implementation;
+  no additional MCU write, reset, printer configuration or heater/motor command
+  was used to implement console automation. The bench remains uncommissioned.
+
+# Earlier validation record - v0.5.0
 
 12 November 2026: early flash eligibility/host-retention gate, three verified
 STM32 build profiles, full flash backup/read-back/reset proof, artifact-only

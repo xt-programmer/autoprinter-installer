@@ -30,7 +30,7 @@ import zipfile
 import config_profiles as cp
 import flash_policy as fp
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 REPOS = {

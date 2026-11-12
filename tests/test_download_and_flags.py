@@ -101,7 +101,7 @@ class DownloadTests(unittest.TestCase):
         opener = Mock()
         opener.open.return_value = response
         argv = ["--url", response.geturl(), "--sha256", checksum or hashlib.sha256(data).hexdigest()] + list(forwarded)
-        with patch.object(bootstrap.sys, "platform", "linux"), patch.object(bootstrap.tempfile, "mkdtemp", return_value=str(folder)), patch.object(bootstrap.shutil, "disk_usage", return_value=Mock(free=1024**3)), patch.object(bootstrap.urllib.request, "build_opener", return_value=opener), patch.object(bootstrap.os, "execv") as execute, contextlib.redirect_stdout(io.StringIO()):
+        with patch.dict(os.environ,{'AUTOPRINTER_TRIGGER_SESSION':''}), patch.object(bootstrap.sys, "platform", "linux"), patch.object(bootstrap.tempfile, "mkdtemp", return_value=str(folder)), patch.object(bootstrap.shutil, "disk_usage", return_value=Mock(free=1024**3)), patch.object(bootstrap.urllib.request, "build_opener", return_value=opener), patch.object(bootstrap.os, "execv") as execute, contextlib.redirect_stdout(io.StringIO()):
             if usb:
                 device, identity = usb
                 with patch.object(bootstrap, "usb_identity", return_value=usb), patch.dict(os.environ, {}, clear=False):

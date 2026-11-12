@@ -78,13 +78,18 @@ def build(root, output, repository, tag):
     raw = "https://raw.githubusercontent.com/%s/%s/install.sh" % (repository, tag)
     command = "curl --proto '=https' --proto-redir '=https' -fsSL " + shlex.quote(raw) + " | sudo sh -s --"
     write_lf(output / "single-command.txt", command + "\n")
+    if (root/'console_launch.py').is_file():
+        import console_launch
+        helper=console_launch.bundled_source(root)
+        (output/'console-launch.py').write_bytes(helper)
+        write_lf(output/'console-launch.py.sha256',hashlib.sha256(helper).hexdigest()+'  console-launch.py\n')
     return {"archive": str(archive), "sha256": digest, "command": command, "launcher": str(output / "install.sh")}
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
-    parser.add_argument("--tag", default="v0.5.0")
+    parser.add_argument("--tag", default="v0.6.0")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     import json

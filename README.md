@@ -1,4 +1,4 @@
-# AutoPrinter v0.5 - supervised Pi / Klipper maintenance
+# AutoPrinter v0.6 - supervised Pi / Klipper maintenance
 
 Supervised bench installer from the supplied `info.txt` and `activity.txt`.
 Host/accessory setup and one H723 Octopus Pro firmware write have been exercised
@@ -8,15 +8,17 @@ actual Flipper/ATtiny keystroke delivery remain unverified. The public manifest
 deliberately requires the missing machine settings/configuration/release pins.
 
 For **Flipper Zero Bad USB or ATtiny/Digispark**, start with
-[USB-KEYBOARD.md](USB-KEYBOARD.md) and the supplied `hid/` launchers. They type a
-pinned command into an already logged-in Pi console; review-only is the default.
+[USB-KEYBOARD.md](USB-KEYBOARD.md) and the supplied `hid/` launchers. Automatic console-login mode switches to a spare tty, logs in, runs once and
+logs out. No worker, pre-login on the printer, keyboard/Enter or startup task is
+needed. Private login payloads contain the operator's credentials. Existing-shell
+review-only mode remains available.
 For the early board/host decision and firmware procedure see
 [BOARD-FLASH.md](BOARD-FLASH.md). A healthy host is held unless flashing verifies.
 
 Download and run inventory directly on the Linux Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s --
 ```
 
 Use `--usb-port YOUR_PORT` for a guarded audit, and add
@@ -34,7 +36,7 @@ newer files are preserved. Version headers come from the first three lines.
 Any replacement leaves Klipper stopped for review. The separate file-only plan is:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --configs
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s -- --configs
 ```
 
 See [PROCESS.txt](PROCESS.txt) for the implemented steps and limits in every mode.
@@ -46,7 +48,7 @@ detected Cartographer. It preserves Mainsail on port **80** and the network.
 The default accessory invocation is a read-only plan:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --peripherals
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s -- --peripherals
 ```
 
 The older [host-only development prototype](HOST-SETUP.md) is retained separately.
@@ -70,7 +72,7 @@ policy and deliberately requires Klipper to be inactive.
 | `run.sh` | Local USB-storage full-stack launcher |
 | `board_flash.py` / `octopus_flasher.py` | Exact-target artifact programming and verified host-update gate |
 | `build_firmware.py` / `flash_policy.py` | Reproducible STM32 profile builds and image/DFU validation |
-| `make_hid.py` / `hid/` | One-shot Flipper and Digispark keyboard command generation |
+| `make_hid.py` / `console_launch.py` / `hid/` | Automatic private console login or existing-shell Flipper/Digispark launch |
 | `firmware-bundles/` | Three pinned CI builds with dictionaries/configs/source provenance |
 | `profiles/` | Place your verified printer files and MCU build config here |
 | `tests/test_safety.py` | Automated safety-policy tests; no printer required |
@@ -116,7 +118,7 @@ physical emergency stop or actuator power isolation.
 2. With the printer supervised, run on the target Pi:
 
    ```sh
-   python3 /path/to/auto-installer-v0.5/autoprinter.py --inventory
+   python3 /path/to/auto-installer-v0.6/autoprinter.py --inventory
    ```
 
 3. Record the trigger's exact `port`, `vid`, `pid` and `serial` from `usb` in the
@@ -128,7 +130,7 @@ physical emergency stop or actuator power isolation.
    audit does not change printer services, packages, configs, Wi-Fi or firmware:
 
    ```sh
-   sudo sh /path/to/auto-installer-v0.5/run.sh \
+   sudo sh /path/to/auto-installer-v0.6/run.sh \
      --report /tmp/autoprinter-audit.json
    ```
 
@@ -217,7 +219,7 @@ refuse mutation. Stop job sources and safely isolate actuators as appropriate;
 an API poll cannot prevent every possible race with another operator.
 
 ```sh
-sudo sh /path/to/auto-installer-v0.5/run.sh --apply --maintenance-confirmed
+sudo sh /path/to/auto-installer-v0.6/run.sh --apply --maintenance-confirmed
 ```
 
 This stages the reviewed stack, backs up configuration
@@ -241,7 +243,7 @@ stack yourself after reviewing the report:
 ```sh
 sudo systemctl start klipper moonraker KlipperScreen
 # Inspect HDMI display, loaded configuration, temperatures, wiring and calibration.
-sudo sh /path/to/auto-installer-v0.5/run.sh --verify --maintenance-confirmed \
+sudo sh /path/to/auto-installer-v0.6/run.sh --verify --maintenance-confirmed \
   --display-confirmed --machine-config-confirmed --report /tmp/autoprinter-verify.json
 ```
 
@@ -259,7 +261,7 @@ physically, keep the MCU on verified USB logic power, and inspect the machine.
 The explicit isolated recovery path is:
 
 ```sh
-sudo sh /path/to/auto-installer-v0.5/run.sh --apply --maintenance-confirmed \
+sudo sh /path/to/auto-installer-v0.6/run.sh --apply --maintenance-confirmed \
   --recovery-isolated --actuator-power-disconnected
 ```
 
@@ -320,14 +322,14 @@ Public source: https://github.com/xt-programmer/autoprinter-installer
 Download and run read-only hardware inventory on the target Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s --
 ```
 
 Choose the trigger's physical USB port from that inventory. For a USB-gated
 audit with the requested capabilities selected (no printer changes):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
 ```
 
 Replace `1-1.3` with the actual trigger port. VID/PID/serial are captured from
@@ -342,7 +344,7 @@ For actual installation/maintenance, supply your completed local machine
 manifest and add `--apply --maintenance-confirmed`:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
 ```
 
 The public release contains an incomplete generic manifest. Your actual board
@@ -370,12 +372,14 @@ bootstrap file or GitHub account/token is required on the Pi. The tag URL pins
 the launcher version. Initial launcher trust comes from your HTTPS access to
 this repository; payload hashing does not provide an independent signature
 for that first launcher. The source script can be downloaded/reviewed first.
-No password is stored or injected by the ATtiny. The main installer adds no
+Existing-shell payloads contain no password. Optional `--console-login` payloads
+contain the supplied pi password and must be kept private; they automate login
+and sudo through a temporary console session without installing a worker. The main installer adds no
 startup/reboot-resume task; accessory apply installs only the passive USB
 history udev rule described in `PERIPHERALS.md`. Standard sudo may request a password on the
-terminal. A future ATtiny command must execute in an already authorized shell.
+terminal. Automatic console login requires a known fresh spare getty and matching keyboard layout; it cannot inspect an arbitrary screen state.
 
-Maintainers: `release.py --repository OWNER/REPO --tag v0.5.0 --output /outside/source/release`
+Maintainers: `release.py --repository OWNER/REPO --tag v0.6.0 --output /outside/source/release`
 builds the ZIP, checksum, embedded `install.sh` and exact one-command text.
 Publish the generated ZIP/checksum as release assets and commit `install.sh`
 before tagging that same release. Generated files are outside the source tree

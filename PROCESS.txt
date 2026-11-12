@@ -1,4 +1,4 @@
-AUTOPRINTER - IMPLEMENTED PROCESS, v0.5.0
+AUTOPRINTER - IMPLEMENTED PROCESS, v0.6.0
 Updated: 12 November 2026
 
 This describes the code that exists now. It distinguishes separate entry points;
@@ -26,7 +26,7 @@ Linux Python 3.9+ and the target's base command-line utilities must already exis
 Normal user/layout: pi, /home/pi, /home/pi/printer_data, Linux/systemd.
 
 Single-command launcher:
-  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s --
+  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.0/install.sh | sudo sh -s --
 
 No options: download the release and run read-only hardware inventory.
 --peripherals: route to the accessory entry point; audit is the default.
@@ -434,45 +434,70 @@ the pair, inactive gates and no automatic startup after template changes.
 Physical printing with the new bundled templates is still supervised
 commissioning work, not something asserted by passing file-policy tests.
 
-11. USB KEYBOARD EMULATOR LAUNCH
--------------------------------
-make_hid.py runs on the preparation computer. Default mode is inventory and
-default behavior types a command without Enter. Optional --execute sends Enter
-once. It emits Flipper text scripts or a Digispark ATtiny85 sketch using
-DigiKeyboard and PROGMEM. The sketch polls USB forever after typing once;
-loop() never repeats the command. Actual device compilation/delivery is pending.
+11. BADUSB AUTOMATIC CONSOLE LAUNCH (NO RESIDENT WORKER)
+------------------------------------------------------
+make_hid.py runs on the preparation computer. Existing-shell mode still types
+a command and leaves Enter to the operator unless --execute is given.
+--console-login is the new insertion workflow. It reads the supplied pi password
+from --password-file and generates a PRIVATE Flipper script or Digispark sketch.
+Credentials are present in the login keystrokes and recoverable capsule; these
+files are not committed/published. The generator does not print their contents.
 
-Before insertion: log into a Pi terminal/console and manually run sudo -v.
-No password/login/desktop shortcut is injected. Match keyboard layouts. For the
-first test select hid/flipper/01-inventory-review.txt in USB mode, connect it to
-the target Pi, press Run, inspect all typed punctuation, then press Enter on a
-real keyboard. The pinned command uses bash pipefail, curl HTTPS and sudo -n;
-missing authorization fails instead of typing into a password prompt. It prints
-the installer exit status and sends no later keystrokes into a running process.
+Reference SSH inspection: US/pc105 mapping, /usr/bin/bash for pi, /dev/tty3
+available, no session on tty3, normal getty template. Other Pis are declared to
+share the same language/keyboard. Physical USB/VT switching remains untested.
+The spare tty must initially be at a fresh login prompt. No arbitrary existing
+shell/application/autologin state is guessed, interrupted or logged out.
 
-The supplied Flipper scripts configure lab selector 1234:abcd and product
-Supervised launcher before USB enumeration. HID audit/maintenance commands ask
-bootstrap for that exact VID/PID/product, optionally serial. Require exactly
-one physical USB device exposing an HID interface. Zero/ambiguous matches or
-conflicting HID/explicit-port selectors refuse before downloading. Freeze its
-port/VID/PID/serial/bus/devnum; verify again before download and pass the frozen
-session to the normal guarded child entry. It selects a trigger, never an MCU.
-Inventory is still a read-only no-trigger exception, even when typed by HID.
+Stock Flipper: select private script with cable disconnected, USB mode, US
+layout; press Run to arm run-on-connect, then insert into Pi. No Pi-side action
+is required. Re-arm before each new connection. ATtiny runs once on insertion.
 
-After inventory, use 02-audit-review.txt and 03-peripherals-plan-review.txt.
-Keep the same script/app open and device connected until the Pi returns its
-result. Flipper Done means typing is done, not installation. Changing app,
-script or USB mode can re-enumerate and cancel maintenance. USB descriptors are
-a presence selector, not authentication. Use proper assigned IDs for a product.
+Automatic order:
+1. Wait 3 seconds after USB connection; send Ctrl+Alt+F3 (or selected tty2..6).
+2. Wait 5 seconds; type pi and Enter. Wait 2.5 seconds; type supplied password
+   and Enter. Wait 12 seconds for shell. No sudo/login prompts are answered by
+   later guessed keystrokes. Incorrect initial console state is a known limit.
+3. Unset HISTFILE and disable history for this temporary Bash shell. Transfer
+   a compact capsule as base64 literals in short lines, avoiding the Linux tty
+   canonical input limit. A final command starts Python. No further keystrokes
+   enter the running installer; the shell already has its completion actions.
+4. Require Linux, actual pi user, expected input tty, exactly one matching HID.
+   Capture physical port/VID/PID/serial/bus/devnum before helper download. Watch
+   this enumeration during download and allow HTTPS redirects only. Validate
+   the helper SHA-256 embedded from the reviewed preparation source.
+5. The downloaded helper is temporary, self-contained Python. Recheck tty/user,
+   HID and captured enumeration; start the normal Presence guard. Require
+   100 MiB temporary space. No sudo/root work has happened yet.
+6. Fetch tag-pinned install.sh, enforce HTTPS/size/time limits and optional
+   explicit launcher SHA-256. The ready private kit supplies that extra hash.
+7. Run sudo -S with password on a private stdin pipe (not in argv or logs).
+   Pass AUTOPRINTER_TRIGGER_SESSION through an explicit /usr/bin/env root
+   command so sudo filtering cannot discard it. The root downloader compares
+   its current USB capture to that session before any payload download.
+8. The root downloader/selected mode retains the existing guard/lock/idle,
+   isolation, profile/version/hash/storage/OS/firmware checks. No trigger worker,
+   launch service, udev trigger, autologin/sudoers change, timer, reboot or resume
+   task is installed. Earlier passive peripheral history is independent.
+9. Stream console output and up to 8 MiB to a private log under
+   /home/pi/printer_data/logs/autoprinter-console-*.log. Root reports/backups
+   remain under /var/lib/autoprinter/. Record the actual exit result. USB
+   removal is handled by the root installer guard; the unprivileged helper
+   never claims it can signal a root firmware/APT child instantaneously.
+10. End the helper with the job and remove only its private generic launcher
+    temp directory. Show exit status 15 seconds, then logout the temporary
+    shell, leaving a fresh tty login for next time. Never auto-reboot or start
+    an uncommissioned printer. Removal never authorizes recovery work.
 
-Generate per-machine apply files with explicit mode, local manifest/profile,
---apply --maintenance-confirmed and required optional flags. --flash is never
-implicit; its independent board/profile/isolation gates still apply. All files
-are visible; output creation refuses existing files. Printable arguments are
-shell-quoted and selector/download options cannot be overridden by extra args.
+The automatic invocation selects inventory/audit/accessories/configs/board/full
+with reviewed arguments; no file supplies invented machine pins. Capability is
+separate from actual flashing, and enabling Wi-Fi is a full-mode policy flag.
+Missing configs/ambiguous printer type/unsupported OS/low disk refuse without
+requesting keyboard input. Current bench still lacks printer.cfg and has less
+than 3 GiB free, so automatic launch cannot make it a commissioned printer.
 
-A keyboard requires a logged-in focused console on the Pi. Flipper attached to
-a laptop with an SSH window is not attached to the Pi: HID discovery refuses.
-Headless first tests should use the normal inventory command manually over SSH
-and specialized explicit SSH supervision where appropriate. No passwords,
-autologin policy or blanket sudo permissions are added by this installer.
+Keep Flipper connected with the same script/app open until the Pi finishes.
+Flipper Done means keystrokes finished only. Identical language/layout does
+not prove every console/login/timing state; physical testing is still needed.
+ATtiny uses PROGMEM and USB polling rather than repeating commands; compile
+with the actual board/core/library and check available flash/RAM before use.

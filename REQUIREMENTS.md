@@ -9,9 +9,9 @@ operator. This table distinguishes implemented paths from v0.2 limitations.
 | info: ATtiny downloads/runs GitHub script | Optional checksum-pinned USB-gated bootstrap; public GitHub release and one-command launcher provided; HID firmware/login provisioning remains an operator task. Ordinary ATtiny is not a USB storage drive. |
 | info: wait 30 min / OK to remove | Explicit completion result and removal message. Elapsed time alone never implies completion. |
 | info: Pi models and Linux images | Model, architecture and userspace allowlist; no physical hardware matrix has been validated. |
-| info: pi user / Ethernet / internet | Standard pi layout checked; Ethernet route/carrier and bound HTTPS probe checked before apply. No password changes or insecure login automation. |
-| info: optional probe/camera | Explicit probe identity gates plugin installation; absent devices receive no optional installation. Camera inventory only. |
-| info: independent restart | No automatic Pi or MCU power cycle/reboot, and no script startup service. |
+| info: pi user / Ethernet / internet | Standard pi layout checked; Ethernet route/carrier and bound HTTPS probe checked before apply. No password changes. Optional private BadUSB console login uses the supplied credential; no resident worker/autologin/sudoers change. |
+| info: optional probe/camera | Explicit probe identity gates plugin installation; absent devices receive no optional installation. Conditional camera software is available in accessory mode. |
+| info: independent restart | No Pi reboot or power cycle/startup service. Explicit verified-MCU reset is part of the flash transaction. |
 | info: abort when trigger removed | Latched 100 ms polling plus operation checkpoints and command process-group cancellation; no automatic subsequent maintenance/recovery. Hard real-time stop is not possible; see README. |
 | info: no boot rerun | No autorun/udev/systemd/timer/cron rule for this script and no reboot resume token. |
 | info: near-zero storage | Console-first refusal before persistent staging; narrow explicit old-G-code pruning when idle. No blind cache/log deletion. |
