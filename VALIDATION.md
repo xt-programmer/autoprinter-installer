@@ -1,4 +1,24 @@
-# Validation record - v0.6.1
+# Validation record - v0.6.2
+
+12 November 2026: fix the automatic-console launcher leaving tty3 visible.
+
+- The real Flipper/Pi inventory run completed with exit 0 and correct HID
+  identity. KlipperScreen was still running, but the wrapper had not returned
+  visibility to its display. SSH restored tty7 without a service restart.
+- A temporary fixed root callback now finds the already running GUI's actual
+  VT from its display process, rechecks GUI identity/USB, and switches back.
+  No service start, later HID keys, worker or 15-second console hold. Ordinary
+  job results are retained; cancellation/signals never run a return command.
+- Real-Pi process discovery found the correct VT7/PID5431. Its absent-trigger
+  case refused with 130 before querying/switching. Full new insertion return
+  remains for the operator's next test; the earlier login/run is now exercised.
+- Windows: 179 discovered, 175 passed, four POSIX-only skips. New tests cover
+  completion callback/private sudo pipe, no callback after cancellation, actual
+  VT discovery, stopped/ambiguous GUI, changed service/PID/USB and fresh logout.
+- Display repair, MCU/config/storage/OS/idle gates remain unchanged. No printer
+  config, firmware, actuator or Pi reboot change was made for this correction.
+
+# Earlier validation record - v0.6.1
 
 12 November 2026: actual HDMI/touchscreen startup repair on the Orange Pi bench.
 

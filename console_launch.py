@@ -18,15 +18,18 @@ import time
 import urllib.request
 import datetime
 import bootstrap
+import display_return
 
 
 def bundled_source(root=None):
     """Produce one self-contained, deterministic release asset."""
     root=Path(root) if root is not None else Path(__file__).parent
     boot=(root/'bootstrap.py').read_text(encoding='utf-8')
+    display=(root/'display_return.py').read_text(encoding='utf-8')
     own=(root/'console_launch.py').read_text(encoding='utf-8')
     prefix="import types,sys\n_b=types.ModuleType('bootstrap')\n"
     prefix+="exec(compile("+repr(boot)+",'<bootstrap>','exec'),_b.__dict__)\nsys.modules['bootstrap']=_b\n"
+    prefix+="_d=types.ModuleType('display_return')\nexec(compile("+repr(display)+",'<display_return_module>','exec'),_d.__dict__)\nsys.modules['display_return']=_d\n"
     return (prefix+own).encode('utf-8')
 
 
@@ -59,7 +62,7 @@ def validate(request):
 
 def launch(request, log_root=None):
     """Run once, forwarding output; the root installer owns cancellation."""
-    guard=None; work=None; log=None; reader=None
+    guard=None; work=None; log=None; reader=None; process=None; session=None; password=None; rc=2
     try:
         password=validate(request)
         selector=request['trigger']
@@ -76,7 +79,7 @@ def launch(request, log_root=None):
         os.chmod(log.name,0o600)
         def emit(message):
             data=(message+'\n').encode(); sys.stdout.buffer.write(data); sys.stdout.buffer.flush(); log.write(data); log.flush()
-        emit('AutoPrinter automatic console session; no resident worker. Log: '+str(log.name))
+        emit('AutoPrinter automatic console session release='+request['tag']+'; no resident worker. Log: '+str(log.name))
         opener=urllib.request.build_opener(bootstrap.HTTPSRedirects())
         url='https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/'+request['tag']+'/install.sh'
         payload=bytearray(); started=time.monotonic()
@@ -97,7 +100,7 @@ def launch(request, log_root=None):
                  'PYTHONDONTWRITEBYTECODE=1','DEBIAN_FRONTEND=noninteractive','/bin/sh',str(launcher)]+request['flags']
         process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
         process.stdin.write((password+'\n').encode()); process.stdin.close()
-        request.pop('password',None); password=None
+        request.pop('password',None)
         def output():
             written=0
             while True:
@@ -117,15 +120,31 @@ def launch(request, log_root=None):
             time.sleep(.1)
         reader.join(); process.stdout.close()
         rc=130 if removed else process.returncode
-        emit('AutoPrinter exit='+str(rc)+'. Review result; completion alone does not mean printer ready.')
-        return rc
+        emit('Installer exit='+str(rc)+'. Completing console session/display return.')
     except (OSError,ValueError,KeyError,RuntimeError,subprocess.SubprocessError) as error:
-        print('CONSOLE LAUNCH REFUSED: '+str(error),flush=True); return 2
+        print('CONSOLE LAUNCH REFUSED: '+str(error),flush=True); rc=2
     finally:
         request.pop('password',None)
         if reader and reader.is_alive(): reader.join()
+        # Wait for actual completion, not a timed HID hotkey. Never start a
+        # stopped GUI or do more work after removal/cancellation/signal exit.
+        if guard and session and password and 0<=rc<128 and process is not None and process.poll() is not None:
+            try:
+                guard.check()
+                command=['sudo','-S','-p','','--','/usr/bin/python3','-c',display_return.ROOT_CODE,json.dumps(session)]
+                returned=subprocess.run(command,input=(password+'\n').encode(),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
+                message=returned.stdout.decode(errors='replace').strip()
+                if message: emit(message)
+                if returned.returncode==130: rc=130
+            except RuntimeError:
+                rc=130
+            except (OSError,subprocess.SubprocessError) as error:
+                print('DISPLAY RETURN FAILED: '+str(error),flush=True)
+        password=None
+        if log: emit('AutoPrinter session exit='+str(rc)+'. Review result; completion alone does not mean printer ready.')
         if log: log.close()
         if guard: guard.close()
         # No configuration/service/firmware cleanup. This is our private generic
         # downloaded launcher, not a retained installer backup or credential file.
         if work: shutil.rmtree(work)
+    return rc

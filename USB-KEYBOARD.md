@@ -15,9 +15,9 @@ touchscreen's lack of typing controls does not prevent Linux receiving USB HID.
 BadUSB sends blind keys: **tty3 must initially be a fresh login prompt**, rather
 than a logged-in shell, application, autologin session or locked GUI. Switching
 VT starts the image's existing console login. No forced interrupt, reboot,
-logout of an unknown session or guessed prompt recovery is attempted. Actual
-Flipper delivery still needs testing; SSH inspection does not prove hotkey/HID
-delivery on every image.
+logout of an unknown session or guessed prompt recovery is attempted. The new
+completion return still needs its full insertion retest; the earlier real
+Flipper login/inventory succeeded on the reference Pi.
 
 ## Insertion-only Flipper tests
 
@@ -56,10 +56,21 @@ re-enumeration refuses. The normal removal/cancellation guard remains in force.
 
 No later keys enter a running installer. Output goes to console and
 `/home/pi/printer_data/logs/autoprinter-console-*.log` (up to 8 MiB per log).
-Root reports/backups remain under `/var/lib/autoprinter/`. When finished, show
-the exit status for fifteen seconds and log out, preparing tty3 for the next
-insertion. The temporary helper ends with the job. It installs no listener or
-startup/resume task and does not automatically reboot/start printer services.
+Root reports/backups remain under `/var/lib/autoprinter/`. After a started job
+exits normally (including an ordinary refusal), the helper returns to an already
+running KlipperScreen while the same USB trigger remains present. It queries
+the GUI service and its real display-server process to identify the actual VT,
+rechecks process identity/USB, then runs only chvt. It never starts a stopped GUI.
+Cancellation, signals, missing/ambiguous GUI or an early bootstrap error leave
+the console; the log records why. The job's exit result is retained.
+
+The shell logs out immediately after the helper finishes, preparing tty3 for
+the next insertion; there is no 15-second hold or later injected hotkey. Wait
+for the Pi/GUI to finish, not Flipper Done. The temporary helper installs no
+listener/startup task and does not automatically reboot/start printer services.
+Release v0.6.1's automatic inventory login/download/run was exercised on the
+real Flipper/Pi with exit 0; v0.6.2 fixes its missing display return. The new
+completion-return sequence awaits the operator's next full insertion test.
 Earlier optional peripheral-history rules are a separate accessory feature;
 this launch mechanism neither adds nor depends on them.
 

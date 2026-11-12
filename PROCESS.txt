@@ -1,4 +1,4 @@
-AUTOPRINTER - IMPLEMENTED PROCESS, v0.6.1
+AUTOPRINTER - IMPLEMENTED PROCESS, v0.6.2
 Updated: 12 November 2026
 
 This describes the code that exists now. It distinguishes separate entry points;
@@ -26,7 +26,7 @@ Linux Python 3.9+ and the target's base command-line utilities must already exis
 Normal user/layout: pi, /home/pi, /home/pi/printer_data, Linux/systemd.
 
 Single-command launcher:
-  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sudo sh -s --
+  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.2/install.sh | sudo sh -s --
 
 No options: download the release and run read-only hardware inventory.
 --peripherals: route to the accessory entry point; audit is the default.
@@ -304,7 +304,7 @@ Apply order:
    upstream service/start script. Preserve networking; no NetworkManager
    takeover. Apply the DRM-display presence condition to avoid headless X
    restart loops. Enable the service; physical display testing is separate.
-   v0.6.1 native X11 correction: compare launch-critical service fields with
+   v0.6.2 native X11 correction: compare launch-critical service fields with
    the pinned native template before packages/UI stop/environment edits. Custom
    backends, launch scripts and conflicting/edited drop-ins require review.
    Stop KlipperScreen before updating its Python environment; verify pip check.
@@ -503,10 +503,22 @@ Automatic order:
    remain under /var/lib/autoprinter/. Record the actual exit result. USB
    removal is handled by the root installer guard; the unprivileged helper
    never claims it can signal a root firmware/APT child instantaneously.
-10. End the helper with the job and remove only its private generic launcher
-    temp directory. Show exit status 15 seconds, then logout the temporary
-    shell, leaving a fresh tty login for next time. Never auto-reboot or start
-    an uncommissioned printer. Removal never authorizes recovery work.
+10. Once a started job exits with a normal code (<128), and the same USB is
+    still present, call a fixed one-shot root display-return command. Query
+    active/running KlipperScreen, capture its PID/starttime, and inspect only
+    its descendant display servers. Select one actual VT from explicit vtN
+    arguments or Linux virtual-console tty numbers. Never guess tty7 from a
+    template or start/restart an inactive service. Require a real tty device.
+    Recheck GUI identity/service state and captured USB enumeration immediately
+    before chvt. Missing/ambiguous GUI or failure records a separate display
+    result; job status is preserved. USB cancellation/signals skip all return
+    commands; root rechecks removal independently before switching. Early
+    helper/bootstrap failures can leave the console for inspection.
+11. Log the display/session result, end the temporary helper and remove only
+    its private generic launcher directory. Logout tty3 immediately after the
+    helper returns, so another insertion meets a fresh login. No 15-second
+    delay, blind follow-up keys, worker, auto-reboot or printer service startup.
+    Removal never authorizes recovery work.
 
 The automatic invocation selects inventory/audit/accessories/configs/board/full
 with reviewed arguments; no file supplies invented machine pins. Capability is
@@ -538,3 +550,16 @@ No package, firmware, printer config, heater/motor or Pi-reboot change was used.
 Klipper remains inactive without printer.cfg; its disconnected page is expected.
 Touch response has not been tested. The temporary diagnostic PATH override was
 removed. There is no new AutoPrinter worker or insertion listener.
+
+13. FIRST BADUSB INVENTORY PILOT / COMPLETION DISPLAY FIX
+-------------------------------------------------------
+The operator ran the automatic payload on .170. The session log
+autoprinter-console-20261112T152602.032446Z.log confirms the expected Flipper HID
+and successful inventory exit 0. Login/download/run completed, but tty3 remained
+visible while the same KlipperScreen PID 5431 was still healthy on tty7. The
+launcher had omitted the screen-return action. SSH restored visible tty7
+without restarting any service. New tests cover return on completion, active
+GUI/actual VT discovery, ambiguity/refusal, stopped GUI preservation, process
+and USB changes, and no return after cancellation. Real-Pi read-only discovery
+found VT7/PID5431; its unplugged-trigger case refused (130) with no switch.
+The operator will test the refreshed complete insertion sequence after download.

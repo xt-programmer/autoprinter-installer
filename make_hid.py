@@ -14,7 +14,7 @@ import shlex
 import zlib
 
 
-TAG = 'v0.6.1'
+TAG = 'v0.6.2'
 REPOSITORY = 'xt-programmer/autoprinter-installer'
 
 
@@ -166,7 +166,7 @@ sys.exit(ns['launch'](r))
     for offset in range(0,len(encoded),240):
         texts.append('AP_AUTOPRINTER_CAPSULE="$AP_AUTOPRINTER_CAPSULE"\''+encoded[offset:offset+240]+"'")
     boot="import os,base64,zlib;exec(zlib.decompress(base64.b64decode(os.environ.pop('AP_AUTOPRINTER_CAPSULE'))))"
-    texts.append('python3 -c '+shlex.quote(boot)+'; ap_rc=$?; unset AP_AUTOPRINTER_CAPSULE; printf "\\nAutoPrinter exit=%s\\n" "$ap_rc"; sleep 15; exit "$ap_rc"')
+    texts.append('python3 -c '+shlex.quote(boot)+'; ap_rc=$?; unset AP_AUTOPRINTER_CAPSULE; printf "\\nAutoPrinter exit=%s\\n" "$ap_rc"; exit "$ap_rc"')
     events=[('delay',3000),('key','CTRL ALT F'+str(vt)),('delay',5000),('text','pi'),('key','ENTER'),
             ('delay',2500),('text',password),('key','ENTER'),('delay',login_wait_ms)]
     for text in texts: events += [('text',text),('key','ENTER'),('delay',250)]

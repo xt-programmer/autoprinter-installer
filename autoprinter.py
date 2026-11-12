@@ -31,7 +31,7 @@ import config_profiles as cp
 import flash_policy as fp
 import screen_runtime as sr
 
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 REPOS = {

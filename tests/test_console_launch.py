@@ -67,6 +67,7 @@ class ConsoleTests(unittest.TestCase):
         self.assertFalse(any(x=='ENTER' or x.startswith('STRING ') for x in lines[final+2:]))
         self.assertIn('; ap_rc=$?; unset AP_AUTOPRINTER_CAPSULE;',lines[final])
         self.assertTrue(lines[final].endswith('exit "$ap_rc"'))
+        self.assertNotIn('sleep 15',lines[final])
 
     def test_placeholder_words_in_password_are_not_replaced(self):
         payload=make_hid.console_payload('flipper','audit','HELPER_URL HELPER_HASH REQUEST')
@@ -95,7 +96,7 @@ class ConsoleTests(unittest.TestCase):
             self.assertNotIn('unit-test-credential',output.getvalue())
             self.assertNotIn('AP_AUTOPRINTER_CAPSULE',output.getvalue())
 
-    def run_helper(self,root,tampered=False,changed=False):
+    def run_helper(self,root,tampered=False,changed=False,exit_code=3):
         device=root/'1-1'; device.mkdir()
         identity={'idVendor':'1234','idProduct':'abcd','serial':'','busnum':'1','devnum':'2'}
         for k,v in identity.items(): (device/k).write_text(v)
@@ -106,10 +107,12 @@ class ConsoleTests(unittest.TestCase):
         request['launcher_sha256']='0'*64 if tampered else hashlib.sha256(data).hexdigest()
         response=io.BytesIO(data); response.geturl=lambda:'https://raw.githubusercontent.com/test'
         opener=Mock(); opener.open.return_value=response
-        process=Mock(); process.poll.return_value=3; process.returncode=3
+        process=Mock(); process.poll.return_value=exit_code; process.returncode=exit_code
         directory=root/'download'; directory.mkdir()
-        with patch.object(console,'validate',return_value='unit-test-credential'), patch.object(console.bootstrap,'hid_identity',return_value=(device,identity)), patch.object(console.tempfile,'mkdtemp',return_value=str(directory)), patch.object(console.shutil,'disk_usage',return_value=Mock(free=1024**3)), patch.object(console.urllib.request,'build_opener',return_value=opener), patch.object(console.subprocess,'Popen',return_value=process) as start, patch.object(console.os,'read',return_value=b''), contextlib.redirect_stdout(Mock()):
+        returned=Mock(returncode=0,stdout=b'DISPLAY_RETURN_JSON {"status":"RETURNED_TO_RUNNING_KLIPPERSCREEN","vt":7}\n')
+        with patch.object(console,'validate',return_value='unit-test-credential'), patch.object(console.bootstrap,'hid_identity',return_value=(device,identity)), patch.object(console.tempfile,'mkdtemp',return_value=str(directory)), patch.object(console.shutil,'disk_usage',return_value=Mock(free=1024**3)), patch.object(console.urllib.request,'build_opener',return_value=opener), patch.object(console.subprocess,'Popen',return_value=process) as start, patch.object(console.subprocess,'run',return_value=returned) as display, patch.object(console.os,'read',return_value=b''), contextlib.redirect_stdout(Mock()):
             rc=console.launch(request,root/'logs')
+        process.display_return_call=display
         return rc,start,process
 
     def test_expected_enumeration_or_launcher_tampering_never_authorizes_sudo(self):
@@ -127,6 +130,21 @@ class ConsoleTests(unittest.TestCase):
             self.assertNotIn('unit-test-credential',' '.join(argv))
             self.assertTrue(any(x.startswith('AUTOPRINTER_TRIGGER_SESSION=') for x in argv))
             process.stdin.write.assert_called_once_with(b'unit-test-credential\n')
+
+    def test_job_completion_returns_display_with_private_pipe_and_no_extra_hid_keys(self):
+        with tempfile.TemporaryDirectory() as t:
+            rc,_,process=self.run_helper(Path(t),exit_code=0)
+            self.assertEqual(rc,0)
+            display=process.display_return_call
+            display.assert_called_once()
+            self.assertEqual(display.call_args.kwargs['input'],b'unit-test-credential\n')
+            self.assertNotIn('unit-test-credential',' '.join(display.call_args.args[0]))
+
+    def test_cancelled_job_never_runs_a_display_return_command(self):
+        with tempfile.TemporaryDirectory() as t:
+            rc,_,process=self.run_helper(Path(t),exit_code=130)
+            self.assertEqual(rc,130)
+            process.display_return_call.assert_not_called()
 
     def test_root_downloader_rejects_a_stale_console_handover_before_network(self):
         with tempfile.TemporaryDirectory() as t:

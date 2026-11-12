@@ -1,17 +1,22 @@
-# AutoPrinter v0.6.1 - supervised Pi / Klipper maintenance
+# AutoPrinter v0.6.2 - supervised Pi / Klipper maintenance
 
 Supervised bench installer from the supplied `info.txt` and `activity.txt`.
 Host/accessory setup and one H723 Octopus Pro firmware write have been exercised
 on an Orange Pi 3 LTS. The firmware passed full read-back, preserved-bootloader
-and post-reset dictionary checks. Printing, F446/F429 physical programming and
-actual Flipper/ATtiny keystroke delivery remain unverified. The public manifest
-deliberately requires the missing machine settings/configuration/release pins.
+and post-reset dictionary checks. Printing and F446/F429 physical programming
+remain unverified. Real Flipper login/inventory completed successfully; the new
+completion display return and ATtiny delivery still need physical testing.
+The public manifest requires missing machine settings/configuration/release pins.
 
-v0.6.1 fixes a real-screen KlipperScreen startup loop caused by inherited
+The v0.6.1 repair fixed a real-screen KlipperScreen startup loop caused by inherited
 CAP_WAKE_ALARM reaching glycin/bubblewrap. The native X11 path clears only the
 GUI client's capabilities, keeps Xorg on tty7 and verifies stable startup.
 The Orange Pi's 1024x600 display is now operator-confirmed stable. Klipper
 remains stopped until printer configuration is commissioned.
+
+v0.6.2 returns completed console jobs to an already running KlipperScreen's
+actual display VT, then logs out the temporary console immediately. It never
+starts a stopped GUI or performs a display return after USB cancellation.
 
 For **Flipper Zero Bad USB or ATtiny/Digispark**, start with
 [USB-KEYBOARD.md](USB-KEYBOARD.md) and the supplied `hid/` launchers. Automatic console-login mode switches to a spare tty, logs in, runs once and
@@ -24,7 +29,7 @@ For the early board/host decision and firmware procedure see
 Download and run inventory directly on the Linux Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.2/install.sh | sudo sh -s --
 ```
 
 Use `--usb-port YOUR_PORT` for a guarded audit, and add
@@ -42,7 +47,7 @@ newer files are preserved. Version headers come from the first three lines.
 Any replacement leaves Klipper stopped for review. The separate file-only plan is:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sudo sh -s -- --configs
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.2/install.sh | sudo sh -s -- --configs
 ```
 
 See [PROCESS.txt](PROCESS.txt) for the implemented steps and limits in every mode.
@@ -54,7 +59,7 @@ detected Cartographer. It preserves Mainsail on port **80** and the network.
 The default accessory invocation is a read-only plan:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sudo sh -s -- --peripherals
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.2/install.sh | sudo sh -s -- --peripherals
 ```
 
 The older [host-only development prototype](HOST-SETUP.md) is retained separately.
@@ -124,7 +129,7 @@ physical emergency stop or actuator power isolation.
 2. With the printer supervised, run on the target Pi:
 
    ```sh
-   python3 /path/to/auto-installer-v0.6.1/autoprinter.py --inventory
+   python3 /path/to/auto-installer-v0.6.2/autoprinter.py --inventory
    ```
 
 3. Record the trigger's exact `port`, `vid`, `pid` and `serial` from `usb` in the
@@ -136,7 +141,7 @@ physical emergency stop or actuator power isolation.
    audit does not change printer services, packages, configs, Wi-Fi or firmware:
 
    ```sh
-   sudo sh /path/to/auto-installer-v0.6.1/run.sh \
+   sudo sh /path/to/auto-installer-v0.6.2/run.sh \
      --report /tmp/autoprinter-audit.json
    ```
 
@@ -225,7 +230,7 @@ refuse mutation. Stop job sources and safely isolate actuators as appropriate;
 an API poll cannot prevent every possible race with another operator.
 
 ```sh
-sudo sh /path/to/auto-installer-v0.6.1/run.sh --apply --maintenance-confirmed
+sudo sh /path/to/auto-installer-v0.6.2/run.sh --apply --maintenance-confirmed
 ```
 
 This stages the reviewed stack, backs up configuration
@@ -249,7 +254,7 @@ stack yourself after reviewing the report:
 ```sh
 sudo systemctl start klipper moonraker KlipperScreen
 # Inspect HDMI display, loaded configuration, temperatures, wiring and calibration.
-sudo sh /path/to/auto-installer-v0.6.1/run.sh --verify --maintenance-confirmed \
+sudo sh /path/to/auto-installer-v0.6.2/run.sh --verify --maintenance-confirmed \
   --display-confirmed --machine-config-confirmed --report /tmp/autoprinter-verify.json
 ```
 
@@ -267,7 +272,7 @@ physically, keep the MCU on verified USB logic power, and inspect the machine.
 The explicit isolated recovery path is:
 
 ```sh
-sudo sh /path/to/auto-installer-v0.6.1/run.sh --apply --maintenance-confirmed \
+sudo sh /path/to/auto-installer-v0.6.2/run.sh --apply --maintenance-confirmed \
   --recovery-isolated --actuator-power-disconnected
 ```
 
@@ -328,14 +333,14 @@ Public source: https://github.com/xt-programmer/autoprinter-installer
 Download and run read-only hardware inventory on the target Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.2/install.sh | sudo sh -s --
 ```
 
 Choose the trigger's physical USB port from that inventory. For a USB-gated
 audit with the requested capabilities selected (no printer changes):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.2/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
 ```
 
 Replace `1-1.3` with the actual trigger port. VID/PID/serial are captured from
@@ -350,7 +355,7 @@ For actual installation/maintenance, supply your completed local machine
 manifest and add `--apply --maintenance-confirmed`:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.1/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.6.2/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
 ```
 
 The public release contains an incomplete generic manifest. Your actual board
@@ -385,7 +390,7 @@ startup/reboot-resume task; accessory apply installs only the passive USB
 history udev rule described in `PERIPHERALS.md`. Standard sudo may request a password on the
 terminal. Automatic console login requires a known fresh spare getty and matching keyboard layout; it cannot inspect an arbitrary screen state.
 
-Maintainers: `release.py --repository OWNER/REPO --tag v0.6.1 --output /outside/source/release`
+Maintainers: `release.py --repository OWNER/REPO --tag v0.6.2 --output /outside/source/release`
 builds the ZIP, checksum, embedded `install.sh` and exact one-command text.
 Publish the generated ZIP/checksum as release assets and commit `install.sh`
 before tagging that same release. Generated files are outside the source tree
