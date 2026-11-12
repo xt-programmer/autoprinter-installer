@@ -131,7 +131,7 @@ def launch(request, log_root=None):
         if guard and session and password and 0<=rc<128 and process is not None and process.poll() is not None:
             try:
                 guard.check()
-                command=['sudo','-S','-p','','--','/usr/bin/python3','-c',display_return.ROOT_CODE,json.dumps(session)]
+                command=['sudo','-S','-p','','--','/usr/bin/python3','-I','-B','-c',display_return.ROOT_CODE,json.dumps(session)]
                 returned=subprocess.run(command,input=(password+'\n').encode(),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30)
                 message=returned.stdout.decode(errors='replace').strip()
                 if message: emit(message)
