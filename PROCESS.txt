@@ -1,0 +1,351 @@
+AUTOPRINTER - IMPLEMENTED PROCESS, v0.4.0
+Updated: 12 November 2026
+
+This describes the code that exists now. It distinguishes separate entry points;
+they are not one universal installation path. It is a supervised bench release.
+Copying configs or installing software does not certify physical printer safety.
+
+1. INPUTS AND ENTRY POINTS
+------------------------
+The release contains:
+  autoprinter.py      Full-stack USB-supervised audit/apply/readiness checks.
+  peripherals.py      Existing native KIAUH host accessory/config maintenance.
+  config_sync.py      Only the two versioned macros/settings files.
+  config_profiles.py  Shared profile selection, version planning and replacement.
+  peripheral_history.py  Passive current USB detection and persistent evidence.
+  bootstrap.py/install.sh  HTTPS downloader, payload validation and mode routing.
+  manifest.json      Intentionally incomplete example machine manifest.
+  host_setup.py      Older restricted development prototype, not the native
+                     KIAUH installation procedure. See section 10.
+
+Linux Python 3.9+ and the target's base command-line utilities must already exist.
+Normal user/layout: pi, /home/pi, /home/pi/printer_data, Linux/systemd.
+
+Single-command launcher:
+  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s --
+
+No options: download the release and run read-only hardware inventory.
+--peripherals: route to the accessory entry point; audit is the default.
+--configs: route to the config-only entry point; audit is the default.
+--peripherals and --configs cannot be combined.
+Otherwise use the full-stack entry point and its explicit USB/machine manifest.
+Adding --apply requests changes; it also requires --maintenance-confirmed.
+No entry point automatically runs again after a reboot or interruption.
+
+The downloader requires HTTPS, rejects non-HTTPS redirects, verifies the exact
+SHA-256 embedded in install.sh, limits the ZIP to 40 MiB/300 seconds, requires
+100 MiB temporary space, and rejects unsafe ZIP paths, symlinks and extraction
+over 100 MiB. Initial trust in install.sh comes from HTTPS to the pinned Git tag;
+the embedded ZIP hash is not an independent signature of the initial launcher.
+Failed/download workspaces remain under /tmp/autoprinter-download-* for review.
+
+2. SUPERVISION AND CANCELLATION
+------------------------------
+For normal maintenance choose a separate physical USB trigger with --usb-port;
+optional expected VID/PID/serial selectors strengthen the match. The downloader
+captures identity, bus number and enumeration number and passes them to the
+installer. The selected trigger must still have that identity at installer
+startup. A camera/probe/MCU is not a suitable trigger if it may re-enumerate.
+
+USB presence is polled every 100 ms and checked before commands/mutation steps.
+Unplug/re-enumeration latches cancellation even if the same device returns.
+Signals also latch cancellation. The active child process group receives
+SIGINT, then TERM/KILL if necessary. There is no automatic restart, rollback,
+resume or reboot after cancellation. Blocking kernel I/O, submitted systemd jobs
+and APT maintainer scripts prevent a hard instantaneous-stop guarantee.
+
+Accessory and config-only modes additionally support explicit supervised SSH:
+  --supervised-ssh --ssh-session-pid "$$"
+Run this from the logged-in pi shell so the shell expands its PID before sudo.
+The guard verifies that PID's pi UID, SSH_CONNECTION and process start time.
+Session termination/PID reuse or signals cancel work at checkpoints. SSH loss
+detection is subject to TCP/kernel delays and is not USB-removal supervision.
+
+Apply operations take /run/autoprinter.lock exclusively. Another installer
+holding that lock causes refusal. Maintenance confirmation means external jobs
+are prevented and the machine is supervised; the script does not enforce access
+control against every other application that might try to start a printer.
+
+3. THE TWO OPERATOR-SUPPLIED CONFIG SETS
+--------------------------------------
+Cartographer printers:
+  Source: C:\Users\Administrator\Documents\CONFIG\500 PROBE
+  macros500.cfg, header Version 6.5
+  settings500.cfg, header Version 6.5
+
+Manual physical Z-endstop printers:
+  Source: C:\Users\Administrator\Documents\CONFIG\500 V5.6
+  macros500.cfg, header Version 5.6
+  settings500.cfg, header Version 5.6
+
+Only these four files are bundled under config_sets/. Their source bytes are
+preserved, including line endings. config_sets/manifest.json records their
+versions and SHA-256 values. Each selected file must match both its declared
+hash and version before it can be used. Example printer.cfg files and the
+source cartographer.cfg are NOT installed by this config update feature.
+
+Target names are exactly:
+  /home/pi/printer_data/config/macros500.cfg
+  /home/pi/printer_data/config/settings500.cfg
+
+The full-stack manifest uses printer_profile = auto, cartographer or manual-z.
+Config-only/accessory CLI modes use --printer-profile with the same choices.
+The default is auto. Extensionless required names macros500/settings500 in older
+machine manifests normalize to macros500.cfg/settings500.cfg. The two reserved
+destinations cannot also be supplied through config_files.
+
+4. CONFIG PROFILE SELECTION (SHARED LOGIC)
+----------------------------------------
+1. Read printer.cfg and follow active [include ...] directives in order,
+   including wildcard matches. Ignore commented/SAVE_CONFIG lines when choosing
+   the type. Read only the config tree and the standard sibling mainsail-config
+   tree (which permits the standard mainsail.cfg symlink).
+2. Refuse include cycles, includes outside those trees, files over 2 MiB,
+   more than 256 file visits, or over 4 MiB total. Record missing includes.
+   Missing macros/settings includes do not prevent repairing those files if
+   the remaining active configuration establishes the printer type.
+3. Active [cartographer] plus [mcu cartographer] and stepper_z endstop_pin
+   probe:z_virtual_endstop selects the Cartographer set, even if USB is absent.
+4. A physical stepper_z MCU/GPIO pin, without active Cartographer sections,
+   selects manual-z. Supported automatic physical-pin forms include PG14,
+   !PG14, ^PG14, named-MCU:PG14 and gpio-number forms. Custom aliases, sensorless
+   virtual endstops, other probes and contradictory layouts need review.
+5. Active legacy [scanner] sections refuse automatic selection/migration.
+6. A connected spare Cartographer does NOT override an existing manual-Z config.
+7. If printer.cfg is absent, a currently named USB Cartographer can select the
+   Cartographer set. Persistent historical detection alone cannot select it.
+   Otherwise an explicit reviewed printer_profile choice is required.
+8. An explicit choice cannot override a contradictory active Z configuration.
+   Ambiguity causes refusal rather than guessing manual Z or converting homing.
+
+The installer does not create/edit printer.cfg, its includes, cartographer.cfg,
+probe offsets, MCU serial settings, board pins or SAVE_CONFIG in this feature.
+Existing printer.cfg must include the two .cfg files for them to become active.
+Full-stack readiness checks verify that both are included, not merely present.
+
+5. VERSION COMPARISON AND REPLACEMENT
+-----------------------------------
+For each file inspect only its first THREE lines for exactly one numeric
+comment header such as "## Version: 6.5 ##". All operator files are expected to
+have this header. Missing, malformed or multiple version headers block changes
+to BOTH files for review; no file date/mtime guess is used.
+
+Compare dot-separated INTEGER components, padding with zeros:
+  6.10 is newer than 6.9; 6.5 equals 6.5.0.
+File dates, directory names and filesystem modification times do not decide age.
+
+Per-file decisions:
+  Missing target                         -> install selected source file.
+  Existing version lower than baseline   -> back up and replace it.
+  Equal version, identical bytes/hash    -> preserve it.
+  Equal version, different local content -> preserve local edits; report them.
+  Existing version higher than baseline  -> preserve it; never downgrade it.
+The two decisions are independent; one file can change while the other stays.
+
+Before any config write:
+1. Validate the selected source hashes and type; reject linked config directory
+   ancestors and symlink/nonregular/oversized managed targets.
+2. Verify required maintenance/guard/space conditions for the selected mode.
+3. Recheck the selected type, source hashes and ALL target hashes against the
+   read-only plan. A concurrent change causes refusal.
+4. Save original bytes of BOTH existing targets into config-files-before/ and
+   save transaction.json with the plan, original hashes and target hashes.
+5. Recheck the guard, inactive/stopped condition and target immediately before
+   each replacement. Write to a temporary file, fsync, replace that one file
+   atomically and fsync its directory. Set installed files to pi:pi, mode 0644.
+6. Verify the resulting file hash and journal each completed replacement.
+
+The two-file pair is NOT one atomic filesystem transaction. Power loss/removal
+can leave one updated file. Originals and the plan are retained; Klipper stays
+stopped and there is no automatic rollback/restart. Inspect the journal AND
+actual hashes during recovery because cancellation can precede a journal write.
+
+6. CONFIG-ONLY MODE
+-------------------
+Audit example:
+  ...install.sh | sudo sh -s -- --configs
+Fresh explicit type example:
+  ...install.sh | sudo sh -s -- --configs --printer-profile cartographer
+Apply adds --apply --maintenance-confirmed and either a USB trigger or the
+explicit supervised SSH flags from section 2.
+
+Audit only reads and prints the plan. It does not save files or history on the
+Pi. An unknown profile/header is reported as BLOCKED and requires review.
+Apply checks Linux, supported Pi hardware, supervision and the exclusive lock.
+It requires Klipper to be inactive; it does not stop the service automatically.
+If neither file needs changing, return CONFIG_FILES_PRESERVED without backups
+or configuration writes. Otherwise require 3 GiB free before writing, create
+/var/lib/autoprinter/configs-<timestamp>/, back up and apply section 5. Recheck
+inactive Klipper before backups/replacements. Return
+CONFIG_FILES_UPDATED_REVIEW_REQUIRED. Never start/restart Klipper afterwards.
+
+This mode makes no APT, network/radio, service-start, MCU or calibration changes.
+It allows the inspected Debian 11/Python 3.9 hosts because it only manages files;
+it does not change the full-stack/accessory OS or Ethernet gates.
+
+7. FULL-STACK ENTRY POINT
+-------------------------
+Inventory reports OS/hardware, USB/serial/video, HDMI, services, disk, logs,
+processes, package audit, required files and the proposed config-file decisions.
+Without --apply/--verify it remains an audit (an explicitly requested --report
+can save the report). --inventory is hardware inventory only.
+
+Apply order:
+1. Require root and --maintenance-confirmed; validate the selected USB trigger.
+2. Allowlisted hosts: Raspberry Pi 3B+/4B/5 and Orange Pi 3 LTS/5 Pro, supported
+   ARM architecture; Debian 12/13 or Ubuntu 22.04/24.04 userspace. This allowlist
+   is not a complete hardware test matrix. Other userspaces refuse this mode.
+3. Validate standard single-pi paths/units and explicit adoption of an existing
+   installation. Validate manifest booleans, pinned source commits, official
+   versioned Mainsail URL/hash, package opt-in and unbroken dpkg state.
+4. Validate every supplied machine file/hash and the shared config plan.
+   Other pre-existing differing machine configs require manual merge. Missing
+   printer.cfg, mainsail.cfg and other required machine files must be supplied;
+   the two new templates do not fabricate a printer hardware configuration.
+5. Optional --allow-prune is restricted to old G-code, verified idle operation,
+   retention of at least 30 days, and freeing space only while below 500 MiB.
+   No silent G-code deletion occurs. Then require at least 3 GiB free.
+6. Verify the internet route is a connected physical Ethernet interface and
+   probe internet over that interface. Wi-Fi opt-in does not bypass this gate.
+7. Normal maintenance: query the required live safety objects twice, two
+   seconds apart. Reject printing, paused/error/unknown jobs, heating/unsafe
+   temperatures, nonzero motion, missing safety objects and pending config.
+   Recovery/fresh mode has separate actuator-power isolation requirements and
+   never overrides a known unsafe live state. Existing-install recovery is
+   restricted to the reviewed DFU path.
+8. Create run state, stop approved printer services, verify no Klipper process
+   remains, and show console progress when supported. Back up stopped-stack
+   configs/database/units/web/display settings and record checksums/manifest.
+9. Install the reviewed host packages (simulate first; no whole-OS upgrade),
+   stage pinned Klipper/Moonraker/KlipperScreen sources and Python environments,
+   check dependencies, and download/hash-check Mainsail.
+10. If --flash is also explicitly requested, execute only the separately
+    verified DFU procedure described in section 9. Otherwise never flash.
+11. Install missing supplied machine files; apply the shared macro/settings
+    plan with its extra originals/journal. Preserve printer.cfg/calibration.
+    Activate staged software while retaining prior trees/environments.
+12. Preserve recognized adopted units and native port-80 KIAUH Mainsail nginx
+    site/webcam proxies. Other enabled port-80 sites require review; do not
+    disable unknown sites. New managed Mainsail endpoints default to port 80.
+13. Wi-Fi is disabled by default after Ethernet is verified. --enable-wifi
+    allows radio/interface activation using existing profiles; credentials,
+    DHCP/static addresses and Ethernet setup are not rewritten. Optional service
+    trimming is limited to the reviewed allowlist, not arbitrary processes.
+14. Recovery leaves services stopped for physical validation. If EITHER managed
+    config file changed, services also remain stopped for a new review even
+    when display/machine confirmation flags were supplied before the change.
+    Otherwise the existing confirmation gates control startup/readiness.
+
+--verify does not start services or execute printer G-code. It requires the
+managed files to be present/current-or-newer with valid headers and actively
+included, free space, Ethernet, required running services, safe idle state,
+no Klipper warnings, live MCU identity/USB-path agreement, all required files,
+and supervised display/machine confirmations. A ready MCU handshake is protocol
+evidence; firmware version strings need not equal the host version string.
+No physical motion/heater/endstop test is automatically performed.
+
+The full-stack path's Cartographer plugin branch still requires its manifest
+USB/install_plugin/revision settings and reviewed machine config. Automatic
+current-or-historical Cartographer accessory provisioning is the separate
+accessory mode below. Full-stack apply does not itself install Crowsnest.
+
+8. ACCESSORY MODE ON AN EXISTING NATIVE HOST
+-------------------------------------------
+Audit reads current USB, retained kernel evidence and persistent detection
+history, and reports Crowsnest/Cartographer/config decisions. It writes neither
+history nor udev rules. Apply requires root, confirmation, supervision/lock,
+reviewed real KIAUH directories, recognized units, inactive Klipper, unbroken
+APT state and 3 GiB free. Ubuntu 26.04 is an explicit experimental opt-in for
+this mode; normal OS policies otherwise apply. Custom/legacy services or
+conflicting existing updater entries require manual adoption.
+
+Apply order:
+1. Validate accessory layout and config-file plan. Each component source pin
+   is checked when that component is reached below; a mismatch stops there.
+2. Back up current config/environment/unit/display settings and record the run.
+3. Apply shared macro/settings rules while Klipper is inactive.
+4. Record positive device evidence and install a small passive udev callback.
+   It records future USB facts only; it never installs software, flashes, opens
+   MCU serial ports, restarts services or resumes the maintenance script.
+5. Crowsnest: install only if a USB webcam is detected now OR previously seen.
+   A USB video-class interface or actual retained UVC detection is evidence;
+   SoC decoder /dev/video0/video1 and mere driver registration are not.
+   Use official pinned v5 installer with unattended/no-reboot settings and
+   native paths; it can build ustreamer when no matching APT binary exists.
+   For a single current camera, use stable USB video-index0 capture path,
+   640x480/15 fps, port 8080 behind /webcam/ on Mainsail port 80. Preserve
+   existing working camera config. Ambiguous cameras require review. A first
+   historical-only install does not guess /dev/video0 or start a nonexistent
+   capture node. Previously configured cameras retain their settings unplugged.
+6. KlipperScreen: install/check native source, environment, dependencies and
+   upstream service/start script. Preserve networking; no NetworkManager
+   takeover. Apply the DRM-display presence condition to avoid headless X
+   restart loops. Enable the service; physical display testing is separate.
+7. Cartographer: install only for a current OR positively retained named probe.
+   Generic Klipper or STM32 DFU VID/PID is insufficient; the Octopus and probe
+   can share VID/PID. Use explicit manufacturer/product/serial-by-id or named
+   kernel evidence. Legacy scanner/IDM/non-scaffold Cartographer files/config
+   require manual migration rather than destructive vendor cleanup.
+   Back up config, klippy-env and affected probe files. Use the reviewed vendor
+   script, preinstall modern NumPy, install current cartographer3d-plugin into
+   klippy-env, check imports/dependencies and register the Python updater.
+   Do not configure/calibrate/flash the probe automatically. The script pin is
+   fixed; PyPI dependencies resolve at install time. CAN-only unnamed probes
+   cannot be safely identified by the passive USB detector.
+8. Write the managed Moonraker accessory include while preserving its main
+   config. Enable/start applicable accessory services; restart Moonraker.
+   Never start Klipper. Verify no Moonraker warnings, port-80 web access and a
+   complete JPEG through /webcam/ when a camera is currently configured.
+   Return ACCESSORIES_INSTALLED_NOT_PRINTER_READY and retain the report.
+
+Persistent evidence is /var/lib/autoprinter/device-history.json. Positive
+observations survive unplugging, but unobserved devices cannot be inferred.
+Corrupt history refuses rather than silently forgetting it. Historical probe
+evidence affects plugin provisioning, not automatic selection of a manual-Z
+printer's macro/settings set. Journals can be incomplete or damaged.
+
+9. FLASHING AND OTHER HIGH-IMPACT LIMITS
+---------------------------------------
+--enable-flashing-capability permits installing build/DFU tools; it does NOT
+request a flash. An actual write additionally requires --flash, --apply,
+verified board revision/MCU, build config/hash, oscillator/clock setting,
+bootloader offset/address, exact physical DFU port and serial, expected normal
+USB identity and documented recovery instructions. Supported explicit STM32
+profiles are F446/F429/H723. Validate these before stopping services. A normal
+USB descriptor is not evidence of the board revision/bootloader offset.
+
+No guessed board pin or arbitrary status macro is executed. The full-stack
+readiness path can optionally set a previously verified LED using its exact
+configured type/name/pin; custom SET_LED overrides are refused. This is the
+explicit status-output exception to the usual no-G-code readiness checks.
+No automatic kernel/distro upgrade, partition repair, power cycling, physical
+homing/probing/calibration or reboot is implemented.
+
+10. STATE, FAILURE, PROTOTYPE AND TEST COVERAGE
+----------------------------------------------
+Run backups, journals, hashes and reports are under /var/lib/autoprinter/.
+Full-stack prior software paths are retained for supervised recovery. Config
+changes retain exact originals separately in config-files-before/. Failure
+after stopping a stack leaves it stopped when supervision is still present.
+After USB removal/cancellation no extra cleanup/rollback work is attempted.
+Interrupted APT/firmware/filesystem work requires inspection before reuse.
+
+The older host_setup.py prototype is an explicitly restricted fresh Orange Pi
+3 LTS / Ubuntu 26.04 SSH path that preserves Wi-Fi, stages host-only software,
+uses port 8080 and leaves Klipper disabled. It is not the current native KIAUH
+procedure and does not install/repair these managed templates. It is retained
+as development history, not selected by --configs or --peripherals.
+
+Observed references independently confirm native KIAUH layouts, .cfg filenames,
+an active HDMI/KlipperScreen installation and a working Cartographer V4 using
+the current package/scaffold/updater approach. Those reference checks were
+READ-ONLY, including a Cartographer host actively printing. Their machine pins,
+offsets and calibrated models are not automatically copied to another printer.
+
+New template/version/replacement behavior is covered by automated tests with
+temporary config trees: correct profile, spare/unplugged probes, includes,
+missing/older/equal/newer versions, local-edit preservation, malformed headers,
+hash tampering/concurrent changes, backup contents, cancellation partway through
+the pair, inactive gates and no automatic startup after template changes.
+Physical printing with the new bundled templates is still supervised
+commissioning work, not something asserted by passing file-policy tests.

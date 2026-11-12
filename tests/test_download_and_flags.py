@@ -89,6 +89,7 @@ class DownloadTests(unittest.TestCase):
         with zipfile.ZipFile(stream, "w") as z:
             z.writestr("auto-installer-v0.2/autoprinter.py", "# test fixture only\n")
             z.writestr("auto-installer-v0.2/peripherals.py", "# accessory fixture only\n")
+            z.writestr("auto-installer-v0.2/config_sync.py", "# config fixture only\n")
             z.writestr("auto-installer-v0.2/manifest.json", "{}")
         return stream.getvalue()
 
@@ -124,6 +125,13 @@ class DownloadTests(unittest.TestCase):
             execute=self.invoke(Path(t), ['--peripherals'])
             command=execute.call_args.args[1]
             self.assertTrue(command[1].endswith('peripherals.py'))
+            self.assertNotIn('--apply',command)
+
+    def test_config_mode_selects_config_entrypoint_and_forwards_profile(self):
+        with tempfile.TemporaryDirectory() as t:
+            command=self.invoke(Path(t),['--configs','--printer-profile','manual-z']).call_args.args[1]
+            self.assertTrue(command[1].endswith('config_sync.py'))
+            self.assertIn('manual-z',command)
             self.assertNotIn('--apply',command)
 
     def test_peripheral_ssh_is_explicit_and_preserves_pid_argument(self):

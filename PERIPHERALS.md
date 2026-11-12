@@ -1,5 +1,11 @@
 # Conditional accessories on an existing KIAUH installation
 
+v0.4 also applies the shared [versioned config policy](CONFIG-SETS.md) before
+accessory provisioning. Auto profile selection follows the active Z endstop;
+use `--printer-profile cartographer` or `--printer-profile manual-z` for a
+reviewed fresh layout without printer.cfg. If the type is unknown, apply refuses
+before changes. Any macro/settings update leaves Klipper inactive for review.
+
 `peripherals.py` adds accessories to a single printer with user `pi`, real native
 `/home/pi/{klipper,klippy-env,moonraker,moonraker-env,KlipperScreen,crowsnest}`
 directories and `~/printer_data`. KlipperScreen/Crowsnest directories can be
@@ -8,14 +14,14 @@ absent before initial setup. It does not prepare the base host or configure an M
 Read-only plan, directly on the Linux Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s -- --peripherals
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --peripherals
 ```
 
 For supervised SSH installation on the inspected Ubuntu 26.04 bench, from the
 logged-in `pi` shell (the shell expands `$$` before entering sudo):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s -- --peripherals --apply --maintenance-confirmed --supervised-ssh --ssh-session-pid "$$" --experimental-ubuntu-26-04
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --peripherals --apply --maintenance-confirmed --supervised-ssh --ssh-session-pid "$$" --experimental-ubuntu-26-04
 ```
 
 For normal USB-supervised operation, replace the SSH flags with

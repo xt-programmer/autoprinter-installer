@@ -1,8 +1,8 @@
 #!/bin/sh
-# Auto-generated for xt-programmer/autoprinter-installer v0.3.0; payload pinned below.
+# Auto-generated for xt-programmer/autoprinter-installer v0.4.0; payload pinned below.
 set -eu
 command -v python3 >/dev/null 2>&1 || { echo 'Python 3.9+ is required' >&2; exit 2; }
-exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.3.0/auto-installer-v0.3.zip --sha256 80ac7770b5bf07f0237d012b213d9231226bf2a5f40cdecfe18a32c2ad1da938 "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
+exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.4.0/auto-installer-v0.4.zip --sha256 3a929b45896566151e1d1b2c3b903d0b2640cf3ecb5b05a902b0f40956c6255a "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
 #!/usr/bin/env python3
 """Download and run a SHA-256-pinned AutoPrinter release.
 
@@ -118,6 +118,7 @@ def main(argv=None):
     parser.add_argument("--url", required=True)
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--peripherals", action="store_true", help="existing KIAUH accessory plan/setup; no MCU operations")
+    parser.add_argument("--configs", action="store_true", help="only versioned macros/settings plan/setup; no services/packages/MCU changes")
     parser.add_argument("--usb-port", help="explicit physical trigger port from inventory")
     parser.add_argument("--usb-vid", help="optional expected vendor ID")
     parser.add_argument("--usb-pid", help="optional expected product ID")
@@ -133,10 +134,12 @@ def main(argv=None):
         parser.error("Expected exact trusted SHA-256 checksum")
     if urllib.parse.urlsplit(args.url).scheme != "https":
         parser.error("Only HTTPS download URLs are supported")
-    if not forwarded and not args.peripherals:
+    if args.peripherals and args.configs: parser.error('Choose --peripherals or --configs, not both')
+    special_mode=args.peripherals or args.configs
+    if not forwarded and not special_mode:
         forwarded = ["--inventory"] if not args.usb_port else []
-    peripheral_audit = args.peripherals and not forwarded
-    peripheral_ssh = args.peripherals and "--supervised-ssh" in forwarded
+    peripheral_audit = special_mode and '--apply' not in forwarded
+    peripheral_ssh = special_mode and "--supervised-ssh" in forwarded
     if not args.usb_port and not (peripheral_audit or peripheral_ssh) and (forwarded != ["--inventory"] or any(x is not None for x in (args.usb_vid, args.usb_pid, args.usb_serial))):
         parser.error("Maintenance/audit needs --usb-port. First run with --inventory to choose the trigger port")
     if "--inventory" in forwarded and any(x in forwarded for x in ("--apply", "--verify", "--flash", "--allow-prune", "--recovery-isolated")):
@@ -175,7 +178,7 @@ def main(argv=None):
             raise RuntimeError("Bundle checksum mismatch; nothing executed")
         dest = work / "bundle"
         unpack(archive, dest, check)
-        entrypoint = "peripherals.py" if args.peripherals else "autoprinter.py"
+        entrypoint = "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
         scripts = list(dest.glob("*/"+entrypoint)) + list(dest.glob(entrypoint))
         if len(scripts) != 1:
             raise RuntimeError("Bundle must have one AutoPrinter entry point at root or one directory deep")

@@ -1,4 +1,4 @@
-# AutoPrinter v0.3 â€” supervised Pi / Klipper maintenance
+# AutoPrinter v0.4 - supervised Pi / Klipper maintenance
 
 First implementation from the supplied `info.txt` and `activity.txt`. This is a
 bench-test release. Host and accessory setup have been run on an Orange Pi 3 LTS;
@@ -9,7 +9,7 @@ machine settings, configuration files and release pins have been supplied.
 Download and run inventory directly on the Linux Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s --
 ```
 
 Use `--usb-port YOUR_PORT` for a guarded audit, and add
@@ -20,6 +20,18 @@ single-command section below for complete examples.
 
 ## What is included
 
+[Versioned config sets](CONFIG-SETS.md) now provide the operator's Cartographer
+6.5 and manual-Z 5.6 `macros500.cfg` / `settings500.cfg`. Full-stack and accessory
+apply install missing or older files with backups; same-version local edits and
+newer files are preserved. Version headers come from the first three lines.
+Any replacement leaves Klipper stopped for review. The separate file-only plan is:
+
+```sh
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --configs
+```
+
+See [PROCESS.txt](PROCESS.txt) for the implemented steps and limits in every mode.
+
 For the native KIAUH layout, [conditional accessory setup](PERIPHERALS.md)
 installs KlipperScreen, Crowsnest only for a currently/previously detected USB
 webcam, and the current Cartographer plugin only for a currently/previously
@@ -27,14 +39,14 @@ detected Cartographer. It preserves Mainsail on port **80** and the network.
 The default accessory invocation is a read-only plan:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s -- --peripherals
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --peripherals
 ```
 
 The older [host-only development prototype](HOST-SETUP.md) is retained separately.
 The live bench uses official KIAUH templates and real native directories. The
 normal USB-gated full-stack maintenance path and its supported-OS/Ethernet/firmware
-checks remain as documented below; accessory setup does not require a printer
-configuration and deliberately requires Klipper to be inactive.
+checks remain as documented below; accessory setup requires an identifiable/explicit printer profile for its config
+policy and deliberately requires Klipper to be inactive.
 
 | File | Purpose |
 | --- | --- |
@@ -46,6 +58,8 @@ configuration and deliberately requires Klipper to be inactive.
 | `host_setup.py` | Experimental fresh-host SSH preparation; no MCU/configuration/printing readiness claim |
 | `peripherals.py` | Guarded native-layout accessory installation, with conditional Crowsnest/Cartographer |
 | `peripheral_history.py` | Passive USB detection and persistent positive evidence; no hardware commands |
+| `config_profiles.py` / `config_sync.py` | Shared versioned 500 template policy and config-only entry point |
+| `config_sets/` | The four exact supplied macro/settings files and their SHA-256 manifest |
 | `run.sh` | Local USB-storage launcher |
 | `profiles/` | Place your verified printer files and MCU build config here |
 | `tests/test_safety.py` | Automated safety-policy tests; no printer required |
@@ -116,16 +130,17 @@ file as the report destination.
 
 ## Complete the manifest before apply
 
-- Obtain the known working `printer.cfg`, `mainsail.cfg`, `macros500`, and
-  `settings500`. Those last two names are literal; change `required_config` if
-  your files actually end in `.cfg`. A detected, explicitly mapped Cartographer
-  also requires `cartographer.cfg`.
+- Obtain the known working `printer.cfg`, `mainsail.cfg` and, for a mapped
+  Cartographer, `cartographer.cfg`. The supplied macro/settings baselines use
+  `macros500.cfg` and `settings500.cfg`; older extensionless required names
+  normalize to these. Set `printer_profile` to `auto`, `cartographer` or `manual-z`.
 - Put missing files in `profiles/` and add filename / relative source path /
   lowercase SHA-256 entries under `config_files`; see `profiles/README.md`.
-  Existing files are preserved. If a supplied file differs from an existing
+  Other existing machine files are preserved. If a supplied file differs from an existing
   file, apply refuses; merge manually first. Config pin assignments, includes,
   homing directions, PID settings, probe offsets and calibration are never
   fabricated. Startup macros/delayed G-code must be reviewed by the operator.
+  Do not also list the two bundled macro/settings targets in `config_files`.
 - Set `allow_package_install: true` after reviewing the package lists in the
   script. Set `adopt_standard_layout: true` only for an inspected standard
   existing installation. The installer preserves recognized existing units;
@@ -287,14 +302,14 @@ Public source: https://github.com/xt-programmer/autoprinter-installer
 Download and run read-only hardware inventory on the target Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s --
 ```
 
 Choose the trigger's physical USB port from that inventory. For a USB-gated
 audit with the requested capabilities selected (no printer changes):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
 ```
 
 Replace `1-1.3` with the actual trigger port. VID/PID/serial are captured from
@@ -306,7 +321,7 @@ For actual installation/maintenance, supply your completed local machine
 manifest and add `--apply --maintenance-confirmed`:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
 ```
 
 The public release contains an incomplete generic manifest. Your actual board
@@ -339,7 +354,7 @@ startup/reboot-resume task; accessory apply installs only the passive USB
 history udev rule described in `PERIPHERALS.md`. Standard sudo may request a password on the
 terminal. A future ATtiny command must execute in an already authorized shell.
 
-Maintainers: `release.py --repository OWNER/REPO --tag v0.3.0 --output /outside/source/release`
+Maintainers: `release.py --repository OWNER/REPO --tag v0.4.0 --output /outside/source/release`
 builds the ZIP, checksum, embedded `install.sh` and exact one-command text.
 Publish the generated ZIP/checksum as release assets and commit `install.sh`
 before tagging that same release. Generated files are outside the source tree

@@ -27,8 +27,9 @@ import time
 import urllib.parse
 import urllib.request
 import zipfile
+import config_profiles as cp
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 REPOS = {
@@ -494,7 +495,8 @@ class Installer:
             self.report["idle_check"] = "passed"
         except (Refuse, OSError, ValueError) as e:
             self.report["idle_check"] = str(e)
-        required = ["printer.cfg", "mainsail.cfg"] + self.c.get("required_config", ["macros500", "settings500"])
+        required = ["printer.cfg", "mainsail.cfg"] + [name+'.cfg' if name in ('macros500','settings500') else name for name in self.c.get("required_config", list(cp.NAMES))]
+        required=list(dict.fromkeys(required+list(cp.NAMES)))
         cart = self.c.get("cartographer", {})
         cart_present = False
         if cart.get("usb"):
@@ -507,6 +509,12 @@ class Installer:
             required.append("cartographer.cfg")
         self.report["cartographer_present"] = cart_present
         self.report["required_files"] = {name: (self.data / "config" / name).is_file() for name in required}
+        try:
+            self.config_plan=cp.plan(self.data/'config',self.c.get('printer_profile','auto'),any(re.search(r'\bcartographer(?:3d)?\b',d.get('manufacturer','')+' '+d.get('product',''),re.I) for d in host['usb']))
+            self.report['config_plan']=self.config_plan
+        except (ValueError,OSError) as error:
+            self.config_plan=None
+            self.report['config_plan']={'error':str(error)}
         self.emit("Required files: " + json.dumps(self.report["required_files"]))
         return host
 
@@ -632,13 +640,23 @@ class Installer:
         if not isinstance(supplied, dict):
             raise Refuse("config_files must be an object")
         for name, spec in supplied.items():
+            if name in cp.NAMES:
+                raise Refuse('Use printer_profile for the bundled macros/settings; do not also supply config_files: '+name)
             if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):
                 raise Refuse("Config destination must be a simple filename")
             self.bundle_file(spec["file"], spec["sha256"])
             target = self.data / "config" / name
             if target.exists() and sha256(target) != spec["sha256"]:
                 raise Refuse("Existing config differs; merge it manually before apply: " + name)
+        try:
+            present=self.report.get('cartographer_present',False) or any(re.search(r'\bcartographer(?:3d)?\b',d.get('manufacturer','')+' '+d.get('product',''),re.I) for d in self.report.get('host',{}).get('usb',[]))
+            self.config_plan=cp.plan(self.data/'config',self.c.get('printer_profile','auto'),present)
+            cp.validate(self.config_plan)
+            self.report['config_plan']=self.config_plan
+        except (ValueError,OSError) as error:
+            raise Refuse(str(error)) from error
         for name in self.report["required_files"]:
+            if name in cp.NAMES: continue
             if not (self.data / "config" / name).is_file() and name not in supplied:
                 raise Refuse("Required machine config not supplied: " + name)
 
@@ -906,6 +924,13 @@ class Installer:
                 atomic_write(destination, source.read_bytes(), self.guard, 0o644)
                 self.command("chown", "pi:pi", destination)
                 self.change("Installed missing operator-supplied config " + name)
+        def config_stopped():
+            if not self.stopped: raise Refuse('Configuration changes require the stopped-stack maintenance phase')
+        changed=cp.apply(self.data/'config',self.config_plan,self.state/'config-files-before',self.guard,
+                         lambda path,data,mode:atomic_write(path,data,self.guard,mode),
+                         ownership=lambda path:self.command('chown','pi:pi',path),before_write=config_stopped)
+        self.report['config_changes']=changed
+        for name in changed: self.change('Installed missing/older '+self.config_plan['profile']+' configuration: '+name)
         for name, path in paths.items():
             self.activate_path(self.home / name, path)
         self.activate_path(self.home / "mainsail", self.stage / "mainsail")
@@ -1047,6 +1072,13 @@ class Installer:
         self.change("Set verified status LED green")
 
     def verify_ready(self):
+        try:
+            planned=cp.plan(self.data/'config',self.c.get('printer_profile','auto'))
+            cp.validate(planned)
+            if planned['changes_required']: raise Refuse('Missing/older managed config needs supervised apply')
+            included={Path(name).name for name in planned['selection']['config_files_read']}
+            if not set(cp.NAMES).issubset(included): raise Refuse('printer.cfg must include macros500.cfg and settings500.cfg before readiness verification')
+        except (ValueError,OSError) as error: raise Refuse(str(error)) from error
         check_free(["/", "/var", self.home])
         self.ethernet_check()
         for service in ("klipper", "moonraker", "KlipperScreen"):
@@ -1155,7 +1187,7 @@ class Installer:
             self.report["status"] = "INSTALLED_NEEDS_POWER_AND_VALIDATION"
             self.emit("Installation complete with actuator power isolated. Restore power under supervision, then run --verify. Services remain stopped.")
             return
-        if not self.args.display_confirmed or not self.args.machine_config_confirmed:
+        if self.report.get('config_changes') or not self.args.display_confirmed or not self.args.machine_config_confirmed:
             self.report["status"] = "INSTALLED_NEEDS_VALIDATION"
             self.emit("Host installed. Printer services remain stopped. Supervise startup, validate the display/machine config, then use --verify with confirmation flags.")
             return

@@ -19,9 +19,12 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: sh -n run.sh && sh -n install.sh
       - run: python autoprinter.py --inventory
+      - run: python config_sync.py --printer-profile manual-z
   published-command:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - name: Download and run published inventory command
-        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sh -s -- --inventory
+        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sh -s -- --inventory
+      - name: Download and plan bundled Cartographer configs without writing
+        run: curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sh -s -- --configs --printer-profile cartographer

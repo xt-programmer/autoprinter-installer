@@ -14,7 +14,8 @@
   "disable_services": [],
   "mainsail_port": 80,
   "prune_older_days": 90,
-  "required_config": ["macros500", "settings500"],
+  "required_config": ["macros500.cfg", "settings500.cfg"],
+  "printer_profile": "auto",
   "revisions": {
     "klipper": null,
     "moonraker": null,

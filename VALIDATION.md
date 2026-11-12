@@ -1,4 +1,25 @@
-# Validation record — v0.3.0
+# Validation record - v0.4.0
+
+12 November 2026: added exact operator macro/settings baselines (Cartographer
+6.5, manual-Z 5.6), a first-three-lines numeric version policy, backups/journal,
+shared full-stack/accessory integration and a config-only guarded entry point.
+
+- Four bundled source files match the supplied Windows files byte-for-byte.
+  Git attributes preserve their line endings on other platforms; the template
+  manifest and release checksums independently verify their hashes.
+- 116 tests discovered on Windows: 112 passed, four POSIX-only tests skipped.
+- New temporary-tree tests cover profile selection, spare/absent probes,
+  first-three-line headers, numeric version order, missing/older replacement,
+  same-version local edits/newer preservation, unknown-header refusal, template
+  tampering, concurrent change, exact backups, mid-pair cancellation and refusal
+  to auto-start Klipper after config changes despite earlier confirmations.
+- PROCESS.txt mirrors the process.txt written to Desktop/AutoInstaller and
+  documents the implemented branch order and current gaps.
+- No networked printer was modified to validate this change. In particular,
+  the read-only reference hosts remained read-only. File-policy tests are not
+  a physical printing/commissioning test of these supplied macro/settings sets.
+
+# Earlier validation record — v0.3.0
 
 12 November 2026: native KIAUH layout on Orange Pi 3 LTS, aarch64,
 Armbian/Ubuntu 26.04, kernel 6.18.44 and Python 3.14.4.

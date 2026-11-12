@@ -19,6 +19,7 @@ import urllib.request
 
 import autoprinter as ap
 import peripheral_history as ph
+import config_profiles as cp
 from host_setup import SSHGuard
 
 HOME = Path('/home/pi')
@@ -136,6 +137,9 @@ class Setup:
                 raise ap.Refuse('Existing update-manager entry requires manual adoption: ' + name)
         if self.report['install']['cartographer']:
             refuse_legacy_cartographer()
+        self.config_plan=cp.plan(CONFIG,self.args.printer_profile,bool(self.report['current']['cartographer']))
+        cp.validate(self.config_plan)
+        self.report['config_plan']=self.config_plan
         cam = CONFIG/'crowsnest.conf'
         if self.report['install']['usb_webcam'] and cam.exists():
             text = cam.read_text()
@@ -189,6 +193,14 @@ class Setup:
         rules += 'ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", ATTR{bInterfaceClass}=="0e", RUN+="'+command+'"\n'
         self.write(Path('/etc/udev/rules.d/70-autoprinter-device-history.rules'), rules)
         self.run('udevadm', 'control', '--reload-rules')
+
+    def configs(self):
+        def inactive():
+            _,state=self.run('systemctl','is-active','klipper',check=False,timeout=15)
+            if state!='inactive': raise ap.Refuse('Klipper became active before config replacement')
+        self.report['config_changes']=cp.apply(CONFIG,self.config_plan,self.state/'config-files-before',self.guard,
+            lambda path,data,mode:self.write(path,data,mode=mode),
+            ownership=lambda path:self.run('chown','pi:pi',path),before_write=inactive)
 
     def crowsnest(self):
         if not self.report['install']['usb_webcam']:
@@ -332,6 +344,7 @@ managed_services: klipper
 def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--printer-profile',choices=cp.PROFILES,default='auto')
     parser.add_argument('--maintenance-confirmed', action='store_true')
     parser.add_argument('--experimental-ubuntu-26-04', action='store_true')
     parser.add_argument('--supervised-ssh', action='store_true')
@@ -352,6 +365,8 @@ def main(argv=None):
         result = subprocess.run(['journalctl','-k','--no-pager','-o','cat','--case-sensitive=no','--grep=cartographer|Found UVC'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=30)
         report = plan(snapshot, ph.load(), result.stdout)
         report['kernel_evidence'] = result.stdout
+        try: report['config_plan']=cp.plan(CONFIG,args.printer_profile,bool(snapshot['cartographer']))
+        except (ValueError,OSError) as error: report['config_plan']={'error':str(error)}
         if not args.apply:
             report['status'] = 'AUDIT_ONLY'
             print(json.dumps(report, indent=2)); return 0
@@ -373,7 +388,7 @@ def main(argv=None):
         lock = os.fdopen(os.open('/run/autoprinter.lock', os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW, 0o600),'a')
         fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
         setup = Setup(args, guard, report)
-        setup.preflight(); setup.backup(); setup.observe()
+        setup.preflight(); setup.backup(); setup.configs(); setup.observe()
         setup.crowsnest(); setup.screen(); setup.cartographer(); setup.finish()
         print('RESULT: '+report['status']+'\nReport: '+str(setup.state/'report.json'))
         return 0

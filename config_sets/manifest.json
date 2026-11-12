@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "profiles": {
+    "cartographer": {
+      "source": "500 PROBE",
+      "version": "6.5",
+      "files": {
+        "macros500.cfg": "07df2d1ca5cf3485057f4ee760168a6077c2b46ea43a48dfac578d15e78029bf",
+        "settings500.cfg": "f46a0ea91bf4a272600570a5fc3503ce52b753dff2113a247969f7946b2dc83d"
+      }
+    },
+    "manual-z": {
+      "source": "500 V5.6",
+      "version": "5.6",
+      "files": {
+        "macros500.cfg": "b5ce424618bb498f5edd0e002dbd55cfc19d9448964ca7aa21f2e6c3e891b6af",
+        "settings500.cfg": "dc2f38c60d03e9e418128c98e6cdca08bf5ca01715f1ac4234daf7582e961b9b"
+      }
+    }
+  }
+}
