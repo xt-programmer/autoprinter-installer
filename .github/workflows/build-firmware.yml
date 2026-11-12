@@ -1,0 +1,41 @@
+name: Build reviewed Octopus USB firmware
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact reviewed Klipper source commit
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        chip: [stm32f446xx, stm32f429xx, stm32h723xx]
+    env:
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Validate pin and obtain isolated upstream source
+        shell: bash
+        run: |
+          set -eu
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git init firmware-source
+          git -C firmware-source remote add origin https://github.com/Klipper3d/klipper.git
+          git -C firmware-source fetch --depth=1 origin "$SOURCE_COMMIT"
+          git -C firmware-source checkout --detach "$SOURCE_COMMIT"
+          test "$(git -C firmware-source rev-parse HEAD)" = "$SOURCE_COMMIT"
+      - name: Install build dependencies on the temporary CI runner
+        run: |
+          sudo apt-get update
+          sudo apt-get --yes --no-install-recommends install gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Clean, normalize and validate menuconfig settings, build firmware
+        run: python3 build_firmware.py --source firmware-source --chip '${{ matrix.chip }}' --output artifact
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: octopus-${{ matrix.chip }}-${{ inputs.source_commit }}
+          path: artifact/
+          retention-days: 14
