@@ -247,7 +247,7 @@ class InstallerPolicyTests(unittest.TestCase):
     def flash_setup(self, root):
         root = Path(root)
         config = root / "octopus.config"
-        config.write_text('CONFIG_MCU="stm32f446xx"\nCONFIG_MACH_STM32=y\nCONFIG_USBSERIAL=y\nCONFIG_STM32_FLASH_START_32768=y\nCONFIG_STM32_CLOCK_REF_12M=y\n')
+        config.write_text('CONFIG_MCU="stm32f446xx"\nCONFIG_MACH_STM32=y\nCONFIG_USBSERIAL=y\nCONFIG_STM32_FLASH_START_8000=y\nCONFIG_STM32_CLOCK_REF_12M=y\n')
         profile = {"board": "octopus-1.1", "mcu": "stm32f446xx", "verified_by": "test-fixture",
                    "recovery_instructions": "test-only", "bootloader_kib": 32,
                    "flash_address": "0x08008000", "clock_config": "CONFIG_STM32_CLOCK_REF_12M=y",

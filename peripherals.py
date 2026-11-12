@@ -38,6 +38,12 @@ def plan(snapshot, history, journal=''):
     return {'current': snapshot, 'history': merged, 'install': dict(ph.wanted(merged, snapshot), KlipperScreen=True)}
 
 
+def complete_jpeg(data):
+    # Some UVC MJPEG frames include a small zero pad after the EOI marker.
+    # Accept at most 16 such bytes; truncated images/other trailing data fail.
+    return data.startswith(b'\xff\xd8') and data[-18:].rstrip(b'\x00').endswith(b'\xff\xd9')
+
+
 def camera_configuration(snapshot):
     nodes = [n['device'] for c in snapshot['usb_webcam'] for n in c.get('nodes', [])]
     if not nodes:
@@ -327,7 +333,7 @@ managed_services: klipper
                 if self.report.get('camera_present'):
                     with urllib.request.urlopen('http://127.0.0.1/webcam/?action=snapshot',timeout=3) as response:
                         data=response.read(2*ap.MIB)
-                        if response.headers.get_content_type()!='image/jpeg' or not data.startswith(b'\xff\xd8') or not data.endswith(b'\xff\xd9'):
+                        if response.headers.get_content_type()!='image/jpeg' or not complete_jpeg(data):
                             raise ap.Refuse('Camera snapshot is not a complete JPEG')
                         self.report['camera_snapshot_bytes']=len(data)
                 break

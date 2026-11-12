@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "chip": "stm32f429xx",
+  "profile": {
+    "processor": "STM32F429",
+    "boot_kib": 32,
+    "crystal_mhz": 8,
+    "flash_symbol": "8000",
+    "chip": "stm32f429xx",
+    "address": 134250496
+  },
+  "source_commit": "29d4ec2d6d840ee839333306003a400da186d41d",
+  "compiler": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009",
+  "sha256": {
+    "klipper.bin": "1d7b849fb45d39843e11e9fdfc534c529938a3d6bf7badbc63bc70a5e5a3361c",
+    "klipper.dict": "34614a7b01b455342048d95fced77cb248731b189fe61fff6ff97cd508a14245",
+    "build.config": "b770a14bf217da3acfe34b4d0b3f4b8838eeefb4479c744c8c15bff4825d1bdb"
+  }
+}

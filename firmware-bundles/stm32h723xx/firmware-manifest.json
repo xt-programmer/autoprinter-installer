@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "chip": "stm32h723xx",
+  "profile": {
+    "processor": "STM32H723",
+    "boot_kib": 128,
+    "crystal_mhz": 25,
+    "flash_symbol": "20000",
+    "chip": "stm32h723xx",
+    "address": 134348800
+  },
+  "source_commit": "29d4ec2d6d840ee839333306003a400da186d41d",
+  "compiler": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009",
+  "sha256": {
+    "klipper.bin": "ef3e358a0dc1c95ca3b7af8b443620e7e5a8e314b32d23515e8c0ecc639d41bc",
+    "klipper.dict": "507db1a2a3c67bc7a42f9f14fa9c34f42374124aee91712986446c6f12c4ed1a",
+    "build.config": "aace954f91dc4ff56b18eeeb5420f5961ac9d64e6e27b8c63c1a117e4135e9b9"
+  }
+}

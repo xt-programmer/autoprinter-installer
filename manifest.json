@@ -28,6 +28,7 @@
   },
   "config_files": {},
   "octopus": {
+    "allow_bootloader_request": false,
     "board": null,
     "mcu": null,
     "verified_by": null,

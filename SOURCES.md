@@ -27,3 +27,12 @@ The current Cartographer plugin requires a migration from legacy scanner config;
 v0.2 refuses that migration rather than deleting configuration. Bootloader/MCU
 settings must be verified for each physical board; an upstream example for a
 different revision is not adequate evidence.
+
+v0.5 firmware/HID references checked 12 November 2026:
+
+- [Voron Octopus Klipper build settings](https://docs.vorondesign.com/build/software/octopus_klipper.html)
+- [dfu-util DfuSe manual](https://dfu-util.sourceforge.net/dfu-util.1.html)
+- [dfu-util source](https://sourceforge.net/p/dfu-util/dfu-util/ci/master/tree/src/dfuse.c)
+- [Flipper script commands](https://developer.flipper.net/flipperzero/doxygen/badusb_file_format.html)
+- [Flipper USB/file transfer/layout instructions](https://docs.flipper.net/zero/bad-usb)
+- [Digispark DigiKeyboard source](https://github.com/digistump/DigisparkArduinoIntegration/tree/master/libraries/DigisparkKeyboard)

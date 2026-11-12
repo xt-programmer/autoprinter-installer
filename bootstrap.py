@@ -46,6 +46,42 @@ def usb_identity(port, vid=None, pid=None, serial=None, root=Path("/sys/bus/usb/
     return device, identity
 
 
+def hid_identity(vid, pid, serial=None, product=None, root=Path("/sys/bus/usb/devices")):
+    """Resolve exactly one connected HID, then freeze its physical enumeration.
+
+    This chooses only the maintenance trigger. It never chooses a flash target.
+    USB descriptors are a presence selector, not proof of operator identity.
+    """
+    if not all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{4}", v) for v in (vid, pid)):
+        raise RuntimeError("HID VID/PID must be four lowercase hexadecimal digits")
+    matches = []
+    for device in sorted(root.glob("*")):
+        if not re.fullmatch(r"\d+-\d+(?:\.\d+)*", device.name):
+            continue
+        try:
+            _, identity = usb_identity(device.name, root=root)
+            if identity['idVendor'] != vid or identity['idProduct'] != pid:
+                continue
+            if serial is not None and identity['serial'] != serial:
+                continue
+            if product is not None and (device / 'product').read_text().strip() != product:
+                continue
+            interfaces = list(root.glob(device.name + ':*'))
+            if not any((p / 'bInterfaceClass').read_text().strip().lower() == '03'
+                       for p in interfaces if (p / 'bInterfaceClass').is_file()):
+                continue
+            matches.append((device, identity))
+        except (OSError, RuntimeError):
+            continue
+    if len(matches) != 1:
+        raise RuntimeError("Expected exactly one matching USB HID trigger; found " + str(len(matches)))
+    device, captured = matches[0]
+    _, current = usb_identity(device.name, vid, pid, serial, root=root)
+    if current != captured:
+        raise RuntimeError("HID trigger changed during selection")
+    return device, captured
+
+
 class Presence:
     def __init__(self, device, expected):
         self.device, self.expected = device, expected
@@ -114,14 +150,19 @@ def main(argv=None):
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--peripherals", action="store_true", help="existing KIAUH accessory plan/setup; no MCU operations")
     parser.add_argument("--configs", action="store_true", help="only versioned macros/settings plan/setup; no services/packages/MCU changes")
+    parser.add_argument('--board-flash',action='store_true',help='separate exact-target board audit/flash transaction')
     parser.add_argument("--usb-port", help="explicit physical trigger port from inventory")
     parser.add_argument("--usb-vid", help="optional expected vendor ID")
     parser.add_argument("--usb-pid", help="optional expected product ID")
     parser.add_argument("--usb-serial", help="optional expected serial; use an empty string if absent")
+    parser.add_argument('--hid-vid', help='resolve exactly one connected HID trigger with this VID')
+    parser.add_argument('--hid-pid', help='required PID with --hid-vid; not a board selector')
+    parser.add_argument('--hid-serial', help='optional HID serial, including an explicit empty string')
+    parser.add_argument('--hid-product', help='optional exact HID USB product string')
     args, forwarded = parser.parse_known_args(argv)
     if forwarded[:1] == ["--"]:
         forwarded = forwarded[1:]
-    if any(x.split("=", 1)[0] in ("--usb-port", "--usb-vid", "--usb-pid", "--usb-serial", "--url", "--sha256") for x in forwarded):
+    if any(x.split("=", 1)[0] in ("--usb-port", "--usb-vid", "--usb-pid", "--usb-serial", "--hid-vid", "--hid-pid", "--hid-serial", "--hid-product", "--url", "--sha256") for x in forwarded):
         parser.error("Do not repeat download/USB options after the -- separator")
     if sys.platform != "linux":
         parser.error("Run this launcher on the Linux Pi")
@@ -129,8 +170,17 @@ def main(argv=None):
         parser.error("Expected exact trusted SHA-256 checksum")
     if urllib.parse.urlsplit(args.url).scheme != "https":
         parser.error("Only HTTPS download URLs are supported")
-    if args.peripherals and args.configs: parser.error('Choose --peripherals or --configs, not both')
-    special_mode=args.peripherals or args.configs
+    if sum([args.peripherals,args.configs,args.board_flash])>1: parser.error('Choose one specialized mode')
+    resolved_hid = None
+    if any(x is not None for x in (args.hid_vid, args.hid_pid, args.hid_serial, args.hid_product)):
+        if not args.hid_vid or not args.hid_pid:
+            parser.error('--hid-vid and --hid-pid are both required')
+        if any(x is not None for x in (args.usb_port, args.usb_vid, args.usb_pid, args.usb_serial)):
+            parser.error('Choose HID discovery or an explicit USB port selector')
+        resolved_hid = hid_identity(args.hid_vid, args.hid_pid, args.hid_serial, args.hid_product)
+        args.usb_port = resolved_hid[0].name
+        print('HID trigger resolved to physical port ' + args.usb_port, flush=True)
+    special_mode=args.peripherals or args.configs or args.board_flash
     if not forwarded and not special_mode:
         forwarded = ["--inventory"] if not args.usb_port else []
     peripheral_audit = special_mode and '--apply' not in forwarded
@@ -142,7 +192,7 @@ def main(argv=None):
     presence = None
     identity = None
     if args.usb_port:
-        device, identity = usb_identity(args.usb_port, args.usb_vid, args.usb_pid, args.usb_serial)
+        device, identity = resolved_hid or usb_identity(args.usb_port, args.usb_vid, args.usb_pid, args.usb_serial)
         presence = Presence(device, identity).start()
     check = presence.check if presence else lambda: None
     try:
@@ -173,7 +223,7 @@ def main(argv=None):
             raise RuntimeError("Bundle checksum mismatch; nothing executed")
         dest = work / "bundle"
         unpack(archive, dest, check)
-        entrypoint = "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
+        entrypoint = 'board_flash.py' if args.board_flash else "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
         scripts = list(dest.glob("*/"+entrypoint)) + list(dest.glob(entrypoint))
         if len(scripts) != 1:
             raise RuntimeError("Bundle must have one AutoPrinter entry point at root or one directory deep")

@@ -1,4 +1,4 @@
-AUTOPRINTER - IMPLEMENTED PROCESS, v0.4.0
+AUTOPRINTER - IMPLEMENTED PROCESS, v0.5.0
 Updated: 12 November 2026
 
 This describes the code that exists now. It distinguishes separate entry points;
@@ -11,6 +11,10 @@ The release contains:
   autoprinter.py      Full-stack USB-supervised audit/apply/readiness checks.
   peripherals.py      Existing native KIAUH host accessory/config maintenance.
   config_sync.py      Only the two versioned macros/settings files.
+  board_flash.py      Exact-target artifact flash and optional host promotion.
+  build_firmware.py/flash_policy.py  Three explicit STM32 build/image profiles.
+  octopus_flasher.py  Shared one-write/backup/read-back/reset transaction.
+  make_hid.py/hid/    One-shot Flipper/Digispark keyboard launchers.
   config_profiles.py  Shared profile selection, version planning and replacement.
   peripheral_history.py  Passive current USB detection and persistent evidence.
   bootstrap.py/install.sh  HTTPS downloader, payload validation and mode routing.
@@ -22,12 +26,13 @@ Linux Python 3.9+ and the target's base command-line utilities must already exis
 Normal user/layout: pi, /home/pi, /home/pi/printer_data, Linux/systemd.
 
 Single-command launcher:
-  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s --
+  curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s --
 
 No options: download the release and run read-only hardware inventory.
 --peripherals: route to the accessory entry point; audit is the default.
 --configs: route to the config-only entry point; audit is the default.
---peripherals and --configs cannot be combined.
+--board-flash: route to the exact-target artifact flash entry; audit is default.
+--peripherals, --configs and --board-flash are mutually exclusive.
 Otherwise use the full-stack entry point and its explicit USB/machine manifest.
 Adding --apply requests changes; it also requires --maintenance-confirmed.
 No entry point automatically runs again after a reboot or interruption.
@@ -54,7 +59,7 @@ SIGINT, then TERM/KILL if necessary. There is no automatic restart, rollback,
 resume or reboot after cancellation. Blocking kernel I/O, submitted systemd jobs
 and APT maintainer scripts prevent a hard instantaneous-stop guarantee.
 
-Accessory and config-only modes additionally support explicit supervised SSH:
+Accessory, config-only and artifact-board modes additionally support supervised SSH:
   --supervised-ssh --ssh-session-pid "$$"
 Run this from the logged-in pi shell so the shell expands its PID before sudo.
 The guard verifies that PID's pi UID, SSH_CONNECTION and process start time.
@@ -190,6 +195,15 @@ processes, package audit, required files and the proposed config-file decisions.
 Without --apply/--verify it remains an audit (an explicitly requested --report
 can save the report). --inventory is hardware inventory only.
 
+Early inventory also checks installed Klipper entry/environment health with a
+bounded --help command and records its source commit when available. A version
+mismatch alone is not corruption. It records KEEP/REPAIR/UPDATE policy. If flash
+is requested it checks target/profile eligibility before stopping services.
+
+If a requested flash is ineligible and the installed host is usable, return
+FLASH_SKIPPED_HOST_PRESERVED after manifest/layout checks, before steps 5-8.
+The following mutation order applies only when the earlier decision permits it.
+
 Apply order:
 1. Require root and --maintenance-confirmed; validate the selected USB trigger.
 2. Allowlisted hosts: Raspberry Pi 3B+/4B/5 and Orange Pi 3 LTS/5 Pro, supported
@@ -216,14 +230,23 @@ Apply order:
 8. Create run state, stop approved printer services, verify no Klipper process
    remains, and show console progress when supported. Back up stopped-stack
    configs/database/units/web/display settings and record checksums/manifest.
-9. Install the reviewed host packages (simulate first; no whole-OS upgrade),
-   stage pinned Klipper/Moonraker/KlipperScreen sources and Python environments,
-   check dependencies, and download/hash-check Mainsail.
-10. If --flash is also explicitly requested, execute only the separately
-    verified DFU procedure described in section 9. Otherwise never flash.
-11. Install missing supplied machine files; apply the shared macro/settings
-    plan with its extra originals/journal. Preserve printer.cfg/calibration.
-    Activate staged software while retaining prior trees/environments.
+9. A requested but ineligible flash returns early for a usable installed
+   Klipper: no stop/stage/update/config activation. A missing/corrupt host can
+   instead enter stopped-stack repair after the normal safety/backup gates.
+10. Install reviewed packages (simulate first; no whole-OS upgrade). For an
+    eligible requested flash, stage only the matching Klipper source/environment,
+    validate dependencies, make clean/olddefconfig/build, then perform section 9.
+    Failure holds healthy installed Klipper, skips dependent stack/config
+    activation and leaves a stopped stack stopped. Missing/corrupt host repair
+    after an unverified flash uses a known original revision only; no latest
+    guess or automatic restart. Cancellation never triggers repair fallback.
+11. Only VERIFIED permits matching Klipper source/environment activation, before
+    the other stack/config staging. Later accessory/dependency failure cannot
+    authorize an unverified host. With no requested flash, keep a usable
+    installed Klipper source/environment. Stage other reviewed components,
+    download/hash-check Mainsail, install missing supplied machine files and
+    apply shared macro/settings rules with originals/journal. Preserve
+    printer.cfg/calibration and retain prior software paths.
 12. Preserve recognized adopted units and native port-80 KIAUH Mainsail nginx
     site/webcam proxies. Other enabled port-80 sites require review; do not
     disable unknown sites. New managed Mainsail endpoints default to port 80.
@@ -304,22 +327,83 @@ Corrupt history refuses rather than silently forgetting it. Historical probe
 evidence affects plugin provisioning, not automatic selection of a manual-Z
 printer's macro/settings set. Journals can be incomplete or damaged.
 
-9. FLASHING AND OTHER HIGH-IMPACT LIMITS
----------------------------------------
---enable-flashing-capability permits installing build/DFU tools; it does NOT
-request a flash. An actual write additionally requires --flash, --apply,
-verified board revision/MCU, build config/hash, oscillator/clock setting,
-bootloader offset/address, exact physical DFU port and serial, expected normal
-USB identity and documented recovery instructions. Supported explicit STM32
-profiles are F446/F429/H723. Validate these before stopping services. A normal
-USB descriptor is not evidence of the board revision/bootloader offset.
+9. BOARD TRANSACTION AND HOST UPDATE GATE
+-----------------------------------------
+Explicit profiles (architecture STM32; communication USB PA11/PA12):
+  STM32F446 / stm32f446xx: 32 KiB bootloader, 12 MHz crystal, app 0x08008000.
+  STM32F429 / stm32f429xx: 32 KiB bootloader, 8 MHz crystal, app 0x08008000.
+  STM32H723 / stm32h723xx: 128 KiB bootloader, 25 MHz crystal, app 0x08020000.
+Kconfig symbols use hexadecimal suffixes _8000/_20000, not _32768/_131072.
+make clean -> write menuconfig-equivalent seed -> make olddefconfig -> validate
+normalized chip/offset/crystal/USB/chip-derived serial/no startup GPIO -> make.
+Validate image size/vectors and config/dictionary/bin/source hashes.
 
-No guessed board pin or arbitrary status macro is executed. The full-stack
-readiness path can optionally set a previously verified LED using its exact
-configured type/name/pin; custom SET_LED overrides are refused. This is the
-explicit status-output exception to the usual no-G-code readiness checks.
-No automatic kernel/distro upgrade, partition repair, power cycling, physical
-homing/probing/calibration or reboot is implemented.
+--enable-flashing-capability permits tooling; it never requests a write or
+bootloader entry by itself. Actual writing needs --apply --flash plus that
+capability, maintenance confirmation, reviewed board settings/identity and the
+mode's safety/isolation gates. A normal USB descriptor cannot prove board
+revision or boot offset. ROM DFU 0483:df11 cannot prove which STM32 it contains.
+
+Full-stack uses its reviewed manifest/build config/hash/exact pins. The separate
+board_flash.py --board-flash launcher uses pinned release firmware bundles or
+an external bundle with an explicit expected firmware SHA-256. Artifact mode
+needs --chip, --target-port and --target-serial. Its write additionally needs
+--board-confirmed-octopus --actuator-power-disconnected. Normal USB needs
+--allow-bootloader-request. Supervision is a separate exact USB trigger or an
+explicit live pi SSH shell. The target being reset cannot be the trigger.
+
+Artifact mode changes no packages/network/services/config files. It verifies
+allowlisted Pi hardware, inactive Klipper, existing healthy native host/env,
+shared lock and 3 GiB entry space. --prepare-host-update first clones the bundle's
+exact source and validates matching requirements, entry point and no unsupported
+local edits/external plugins. It reserves 500 MiB before the physical transaction.
+It uses CI-built images so no ~1 GiB compiler installation is needed on the Pi.
+
+Physical transaction:
+1. Identify the exact normal-mode chip using protocol identify only; or require
+   the explicitly inspected ROM-DFU profile. No G-code/config command is sent.
+2. Optional normal-to-DFU request is limited to the exact target. Opening serial
+   must use O_NOCTTY and tolerate upstream's request-process HUP; successful
+   re-enumeration on the SAME physical port is the proof, not its exit code.
+3. Select exact DFU-only VID/PID, physical port, DFU serial and internal-flash
+   alternate 0. Parse readable/erasable/writable sector map rooted at 0x08000000.
+   Refuse ambiguous/unsupported layouts, size/address or protected read failures.
+4. Upload full mapped internal flash BEFORE programming. Record bytes and SHA.
+   Require a valid existing bootloader vector. Blank/lost bootloader requires
+   manufacturer recovery, not application-only flashing.
+5. Record WRITE_STARTED; download only the application at its nonzero offset,
+   once. No mass erase/unprotect/option writes and no automatic repeated write.
+6. Upload the full flash again. Require exact application bytes, unchanged
+   bootloader prefix and unchanged bytes outside app-affected erase sectors.
+7. Leave DFU with a command-only request, not another download. Wait for exact
+   normal USB on the same port AND a stable udev serial link. The live dictionary
+   must equal the built dictionary from the pinned source.
+8. Only after matching dictionary, explicitly reset the MCU. Require changed USB
+   enumeration plus stable serial link and identical dictionary after reset.
+   This proves reset persistence, not a physical power-cycle or motion test.
+9. Mark VERIFIED. Only now promote matching host source/environment. Artifact
+   mode does this only with --prepare-host-update, retaining native old source
+   and its promotion intent; it never starts Klipper. Full-stack promotes before
+   staging the other components and retains old trees/environments.
+
+Failures/cancellation never update a healthy host or auto-roll back firmware.
+A failed application write may still need ROM DFU/SWD recovery. Full backup,
+hashes, reports and retained source support supervised recovery; storage failure
+still requires an off-device backup. There is no automatic resume mechanism.
+
+One H723 application write was completed on the USB-powered Orange Pi test rig
+on 12 November 2026, with full read-back, bootloader preservation and dictionary
+verification before/after explicit reset. Host commit then promoted:
+29d4ec2d6d840ee839333306003a400da186d41d. Two verification races (HUP and delayed
+udev link) were fixed and checks continued WITHOUT a second firmware write.
+The corrected one-shot CLI still needs a clean hardware run. F446/F429 compile
+and policy checks pass but no physical board write was attempted for them.
+Klipper remains stopped without commissioned printer.cfg; printer readiness,
+heaters/motion, calibration, cold power-cycle and physical HDMI remain pending.
+
+No guessed pin/status macro, homing/probing, kernel/distro upgrade, partition
+repair or Pi reboot is implemented. Optional full-stack ready LED output still
+requires a previously verified exact section/name/type/pin; overrides refuse.
 
 10. STATE, FAILURE, PROTOTYPE AND TEST COVERAGE
 ----------------------------------------------
@@ -349,3 +433,46 @@ hash tampering/concurrent changes, backup contents, cancellation partway through
 the pair, inactive gates and no automatic startup after template changes.
 Physical printing with the new bundled templates is still supervised
 commissioning work, not something asserted by passing file-policy tests.
+
+11. USB KEYBOARD EMULATOR LAUNCH
+-------------------------------
+make_hid.py runs on the preparation computer. Default mode is inventory and
+default behavior types a command without Enter. Optional --execute sends Enter
+once. It emits Flipper text scripts or a Digispark ATtiny85 sketch using
+DigiKeyboard and PROGMEM. The sketch polls USB forever after typing once;
+loop() never repeats the command. Actual device compilation/delivery is pending.
+
+Before insertion: log into a Pi terminal/console and manually run sudo -v.
+No password/login/desktop shortcut is injected. Match keyboard layouts. For the
+first test select hid/flipper/01-inventory-review.txt in USB mode, connect it to
+the target Pi, press Run, inspect all typed punctuation, then press Enter on a
+real keyboard. The pinned command uses bash pipefail, curl HTTPS and sudo -n;
+missing authorization fails instead of typing into a password prompt. It prints
+the installer exit status and sends no later keystrokes into a running process.
+
+The supplied Flipper scripts configure lab selector 1234:abcd and product
+Supervised launcher before USB enumeration. HID audit/maintenance commands ask
+bootstrap for that exact VID/PID/product, optionally serial. Require exactly
+one physical USB device exposing an HID interface. Zero/ambiguous matches or
+conflicting HID/explicit-port selectors refuse before downloading. Freeze its
+port/VID/PID/serial/bus/devnum; verify again before download and pass the frozen
+session to the normal guarded child entry. It selects a trigger, never an MCU.
+Inventory is still a read-only no-trigger exception, even when typed by HID.
+
+After inventory, use 02-audit-review.txt and 03-peripherals-plan-review.txt.
+Keep the same script/app open and device connected until the Pi returns its
+result. Flipper Done means typing is done, not installation. Changing app,
+script or USB mode can re-enumerate and cancel maintenance. USB descriptors are
+a presence selector, not authentication. Use proper assigned IDs for a product.
+
+Generate per-machine apply files with explicit mode, local manifest/profile,
+--apply --maintenance-confirmed and required optional flags. --flash is never
+implicit; its independent board/profile/isolation gates still apply. All files
+are visible; output creation refuses existing files. Printable arguments are
+shell-quoted and selector/download options cannot be overridden by extra args.
+
+A keyboard requires a logged-in focused console on the Pi. Flipper attached to
+a laptop with an SSH window is not attached to the Pi: HID discovery refuses.
+Headless first tests should use the normal inventory command manually over SSH
+and specialized explicit SSH supervision where appropriate. No passwords,
+autologin policy or blanket sudo permissions are added by this installer.

@@ -1,3 +1,4 @@
 * text=auto eol=lf
 *.zip binary
 config_sets/**/*.cfg -text
+firmware-bundles/** -text

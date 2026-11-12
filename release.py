@@ -84,7 +84,7 @@ def build(root, output, repository, tag):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
-    parser.add_argument("--tag", default="v0.4.0")
+    parser.add_argument("--tag", default="v0.5.0")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     import json

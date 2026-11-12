@@ -1,15 +1,22 @@
-# AutoPrinter v0.4 - supervised Pi / Klipper maintenance
+# AutoPrinter v0.5 - supervised Pi / Klipper maintenance
 
-First implementation from the supplied `info.txt` and `activity.txt`. This is a
-bench-test release. Host and accessory setup have been run on an Orange Pi 3 LTS;
-printing, MCU flashing and physical display output remain unverified. The
-included manifest deliberately blocks installation/flashing until the missing
-machine settings, configuration files and release pins have been supplied.
+Supervised bench installer from the supplied `info.txt` and `activity.txt`.
+Host/accessory setup and one H723 Octopus Pro firmware write have been exercised
+on an Orange Pi 3 LTS. The firmware passed full read-back, preserved-bootloader
+and post-reset dictionary checks. Printing, F446/F429 physical programming and
+actual Flipper/ATtiny keystroke delivery remain unverified. The public manifest
+deliberately requires the missing machine settings/configuration/release pins.
+
+For **Flipper Zero Bad USB or ATtiny/Digispark**, start with
+[USB-KEYBOARD.md](USB-KEYBOARD.md) and the supplied `hid/` launchers. They type a
+pinned command into an already logged-in Pi console; review-only is the default.
+For the early board/host decision and firmware procedure see
+[BOARD-FLASH.md](BOARD-FLASH.md). A healthy host is held unless flashing verifies.
 
 Download and run inventory directly on the Linux Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s --
 ```
 
 Use `--usb-port YOUR_PORT` for a guarded audit, and add
@@ -27,7 +34,7 @@ newer files are preserved. Version headers come from the first three lines.
 Any replacement leaves Klipper stopped for review. The separate file-only plan is:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --configs
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --configs
 ```
 
 See [PROCESS.txt](PROCESS.txt) for the implemented steps and limits in every mode.
@@ -39,7 +46,7 @@ detected Cartographer. It preserves Mainsail on port **80** and the network.
 The default accessory invocation is a read-only plan:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --peripherals
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --peripherals
 ```
 
 The older [host-only development prototype](HOST-SETUP.md) is retained separately.
@@ -60,7 +67,11 @@ policy and deliberately requires Klipper to be inactive.
 | `peripheral_history.py` | Passive USB detection and persistent positive evidence; no hardware commands |
 | `config_profiles.py` / `config_sync.py` | Shared versioned 500 template policy and config-only entry point |
 | `config_sets/` | The four exact supplied macro/settings files and their SHA-256 manifest |
-| `run.sh` | Local USB-storage launcher |
+| `run.sh` | Local USB-storage full-stack launcher |
+| `board_flash.py` / `octopus_flasher.py` | Exact-target artifact programming and verified host-update gate |
+| `build_firmware.py` / `flash_policy.py` | Reproducible STM32 profile builds and image/DFU validation |
+| `make_hid.py` / `hid/` | One-shot Flipper and Digispark keyboard command generation |
+| `firmware-bundles/` | Three pinned CI builds with dictionaries/configs/source provenance |
 | `profiles/` | Place your verified printer files and MCU build config here |
 | `tests/test_safety.py` | Automated safety-policy tests; no printer required |
 | `REQUIREMENTS.md` | Coverage of every item in your two input files |
@@ -105,7 +116,7 @@ physical emergency stop or actuator power isolation.
 2. With the printer supervised, run on the target Pi:
 
    ```sh
-   python3 /path/to/auto-installer-v0.2.1/autoprinter.py --inventory
+   python3 /path/to/auto-installer-v0.5/autoprinter.py --inventory
    ```
 
 3. Record the trigger's exact `port`, `vid`, `pid` and `serial` from `usb` in the
@@ -117,7 +128,7 @@ physical emergency stop or actuator power isolation.
    audit does not change printer services, packages, configs, Wi-Fi or firmware:
 
    ```sh
-   sudo sh /path/to/auto-installer-v0.2.1/run.sh \
+   sudo sh /path/to/auto-installer-v0.5/run.sh \
      --report /tmp/autoprinter-audit.json
    ```
 
@@ -170,9 +181,8 @@ file as the report destination.
   selector and set `install_plugin: true` to install the pinned current plugin.
   No mapping/detection means no optional plugin installation. Legacy `[scanner]`
   configs require a manual migration. Probe firmware flashing and calibration
-  are outside v0.2. A detected probe must connect as `mcu cartographer` before
-  readiness passes. Webcam devices are inventoried; camera streaming software
-  is not installed or changed.
+  remain outside this installer. A detected probe must connect as `mcu cartographer` before
+  readiness passes. Webcam streaming software is conditional in the separate accessory mode.
 - Wi-Fi is blocked and brought down by default, or enabled with `--enable-wifi`, only after Ethernet is verified. Ethernet
   configuration, static addresses, DHCP, SSH settings and passwords are not
   rewritten. The radio block is for the current boot; systemd-rfkill can retain
@@ -207,17 +217,21 @@ refuse mutation. Stop job sources and safely isolate actuators as appropriate;
 an API poll cannot prevent every possible race with another operator.
 
 ```sh
-sudo sh /path/to/auto-installer-v0.2.1/run.sh --apply --maintenance-confirmed
+sudo sh /path/to/auto-installer-v0.5/run.sh --apply --maintenance-confirmed
 ```
 
-This installs/updates the host to the reviewed manifest, backs up configuration
+This stages the reviewed stack, backs up configuration
 and the stopped Moonraker database, stages new environments, retains old files,
 applies the selected Wi-Fi policy and leaves printer services stopped for validation. It also repairs
 missing supported service files and recreates Python environments. It does not
 blindly reset repositories, erase config, force-remove APT locks, or run a global
 OS upgrade. Before the first software installation at least **3 GiB** must be
 free on each relevant filesystem; staging and backups recheck free space.
-Large backups/installations can require substantially more.
+Large backups/installations can require substantially more. A usable installed
+Klipper source/environment is retained if no board flash is requested or if
+flashing is ineligible/fails. A verified board write authorizes only the matching
+host revision. Missing/corrupt host recovery is a separate, stopped-stack path;
+after an unverified flash it requires a known original revision.
 
 For unattended software restart within an already supervised bench session,
 add both `--display-confirmed --machine-config-confirmed` only if those claims
@@ -227,7 +241,7 @@ stack yourself after reviewing the report:
 ```sh
 sudo systemctl start klipper moonraker KlipperScreen
 # Inspect HDMI display, loaded configuration, temperatures, wiring and calibration.
-sudo sh /path/to/auto-installer-v0.2.1/run.sh --verify --maintenance-confirmed \
+sudo sh /path/to/auto-installer-v0.5/run.sh --verify --maintenance-confirmed \
   --display-confirmed --machine-config-confirmed --report /tmp/autoprinter-verify.json
 ```
 
@@ -245,7 +259,7 @@ physically, keep the MCU on verified USB logic power, and inspect the machine.
 The explicit isolated recovery path is:
 
 ```sh
-sudo sh /path/to/auto-installer-v0.2.1/run.sh --apply --maintenance-confirmed \
+sudo sh /path/to/auto-installer-v0.5/run.sh --apply --maintenance-confirmed \
   --recovery-isolated --actuator-power-disconnected
 ```
 
@@ -255,17 +269,21 @@ compatible firmware. The script leaves all printer services stopped and returns
 `INSTALLED_NEEDS_POWER_AND_VALIDATION`. Reconnect actuator power only under
 supervision, then use the startup/verification steps above.
 
-Flashing is **opt-in** with both `--enable-flashing-capability --flash`. The Octopus must already be in STM32 ROM
-DFU, with a unique serial and physical port. The manifest requires the exact
-board revision, an inspected `stm32f446xx`, `stm32f429xx` or `stm32h723xx` MCU,
-operator identity, known working full Klipper `.config` and its SHA-256, exact
-clock setting, nonzero bootloader offset, matching flash address, expected
-normal-mode USB identity and recovery instructions. The script checks the build
-settings again after `make olddefconfig`, builds from the same pinned Klipper
-source as the host, and uses serial-selected `dfu-util` internal flash alternate
-0. It never chooses a chip/boot offset from generic `0483:df11`, forces ROM DFU
-entry, mass-erases flash, or flashes Cartographer/ATtiny. Katapult, CAN, SD-card
-flashing and readback of old MCU firmware are outside v0.2.
+Flashing is **opt-in** with `--enable-flashing-capability --flash --apply` and
+the reviewed profile/supervision/isolation settings. STM32F446 uses 32 KiB/12 MHz,
+F429 uses 32 KiB/8 MHz and H723 uses 128 KiB/25 MHz; all use USB PA11/PA12.
+Normal Klipper USB can request ROM DFU only with an explicit bootloader-request
+opt-in. Generic `0483:df11` never selects a chip, board revision or offset.
+
+The transaction backs up full mapped internal flash before writing, preserves
+the nonzero bootloader range, writes the application once, verifies full
+read-back, checks the live built dictionary, resets only that verified MCU and
+checks the same dictionary again. Only VERIFIED permits matching host promotion.
+There is no mass erase, option-byte change, repeated write or automatic firmware
+rollback. Failed programming can still require manual recovery. See
+[BOARD-FLASH.md](BOARD-FLASH.md) for the separate artifact-only mode, required
+flags and validation limits. Katapult, CAN, SD-card and probe programming are
+outside this release.
 
 ## Low disk space, logs and recovery
 
@@ -302,26 +320,29 @@ Public source: https://github.com/xt-programmer/autoprinter-installer
 Download and run read-only hardware inventory on the target Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s --
 ```
 
 Choose the trigger's physical USB port from that inventory. For a USB-gated
 audit with the requested capabilities selected (no printer changes):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
 ```
 
 Replace `1-1.3` with the actual trigger port. VID/PID/serial are captured from
 that explicitly selected port before download and kept fixed throughout the
 session; optional `--usb-vid`, `--usb-pid`, `--usb-serial` additionally enforce
-expected values. Ambiguous product-name/VID-only autodetection is never used.
+expected values. Alternatively `--hid-vid VID --hid-pid PID` resolves exactly one matching HID
+and freezes its physical enumeration; `--hid-product`/`--hid-serial` constrain
+that selection. Missing or multiple matches refuse. It never selects an MCU.
+See [USB-KEYBOARD.md](USB-KEYBOARD.md).
 
 For actual installation/maintenance, supply your completed local machine
 manifest and add `--apply --maintenance-confirmed`:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.4.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
 ```
 
 The public release contains an incomplete generic manifest. Your actual board
@@ -354,7 +375,7 @@ startup/reboot-resume task; accessory apply installs only the passive USB
 history udev rule described in `PERIPHERALS.md`. Standard sudo may request a password on the
 terminal. A future ATtiny command must execute in an already authorized shell.
 
-Maintainers: `release.py --repository OWNER/REPO --tag v0.4.0 --output /outside/source/release`
+Maintainers: `release.py --repository OWNER/REPO --tag v0.5.0 --output /outside/source/release`
 builds the ZIP, checksum, embedded `install.sh` and exact one-command text.
 Publish the generated ZIP/checksum as release assets and commit `install.sh`
 before tagging that same release. Generated files are outside the source tree

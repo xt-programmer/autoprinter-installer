@@ -90,6 +90,7 @@ class DownloadTests(unittest.TestCase):
             z.writestr("auto-installer-v0.2/autoprinter.py", "# test fixture only\n")
             z.writestr("auto-installer-v0.2/peripherals.py", "# accessory fixture only\n")
             z.writestr("auto-installer-v0.2/config_sync.py", "# config fixture only\n")
+            z.writestr('auto-installer-v0.2/board_flash.py','# flash fixture only\n')
             z.writestr("auto-installer-v0.2/manifest.json", "{}")
         return stream.getvalue()
 
@@ -133,6 +134,12 @@ class DownloadTests(unittest.TestCase):
             self.assertTrue(command[1].endswith('config_sync.py'))
             self.assertIn('manual-z',command)
             self.assertNotIn('--apply',command)
+
+    def test_board_flash_audit_routes_without_any_implicit_flash(self):
+        with tempfile.TemporaryDirectory() as t:
+            command=self.invoke(Path(t),['--board-flash','--chip','stm32h723xx','--target-port','5-1','--target-serial','ABC']).call_args.args[1]
+            self.assertTrue(command[1].endswith('board_flash.py'))
+            self.assertNotIn('--flash',command); self.assertNotIn('--apply',command)
 
     def test_peripheral_ssh_is_explicit_and_preserves_pid_argument(self):
         with tempfile.TemporaryDirectory() as t:

@@ -1,0 +1,8 @@
+ID 1234:abcd AutoPrinter:Supervised launcher
+REM Logged-in Pi shell only. Authenticate sudo manually first.
+REM Match the Pi keyboard layout. No passwords in this file.
+DELAY 2000
+DEFAULT_STRING_DELAY 20
+STRING bash -o pipefail -c 'curl --proto '"'"'=https'"'"' --proto-redir '"'"'=https'"'"' -fSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.5.0/install.sh | sudo -n sh -s -- --hid-vid 1234 --hid-pid abcd --hid-product '"'"'Supervised launcher'"'"''; ap_rc=$?; printf "\nAutoPrinter exit=%s\n" "$ap_rc"; (exit "$ap_rc")
+REM Review the command, then press Enter on a real keyboard.
+REM Keep this script open and USB connected until the Pi reports completion.

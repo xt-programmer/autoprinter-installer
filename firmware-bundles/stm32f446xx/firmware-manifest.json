@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "chip": "stm32f446xx",
+  "profile": {
+    "processor": "STM32F446",
+    "boot_kib": 32,
+    "crystal_mhz": 12,
+    "flash_symbol": "8000",
+    "chip": "stm32f446xx",
+    "address": 134250496
+  },
+  "source_commit": "29d4ec2d6d840ee839333306003a400da186d41d",
+  "compiler": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009",
+  "sha256": {
+    "klipper.bin": "1837a5d439d5e3fa108e3e6b9649b11acb46d43a02b5717a127199944698d834",
+    "klipper.dict": "f88c00165f1d883ce91bc6cc9724fd49ac867cae1c02c1325a6e042c5361c8ec",
+    "build.config": "e07682fcf86792da85ab98c4ad5e489c11d4d022b0408cca180f195d17446173"
+  }
+}

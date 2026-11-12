@@ -28,8 +28,9 @@ import urllib.parse
 import urllib.request
 import zipfile
 import config_profiles as cp
+import flash_policy as fp
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 REPOS = {
@@ -473,6 +474,15 @@ class Installer:
         self.guard.check()
         host = inspect_host()
         self.report["host"] = host
+        self.report['flash_state']='NOT_REQUESTED'
+        self.report['klipper_host_health']=self.klipper_host_health()
+        self.report['klipper_host_action']=fp.host_action(self.report['klipper_host_health']['state'],'NOT_REQUESTED')
+        if self.args.flash:
+            try:
+                self.flash_profile()
+                self.report['flash_state']='ELIGIBLE_UNPROVEN'
+            except (Refuse,ValueError,OSError,KeyError) as error:
+                self.report.update(flash_state='INELIGIBLE',flash_reason=str(error))
         self.emit(json.dumps(host, indent=2))
         self.before = {s: self.systemd_state(s) for s in SERVICES}
         self.report["services_before"] = self.before
@@ -517,6 +527,23 @@ class Installer:
             self.report['config_plan']={'error':str(error)}
         self.emit("Required files: " + json.dumps(self.report["required_files"]))
         return host
+
+    def klipper_host_health(self):
+        source=self.home/'klipper'; env=self.home/'klippy-env'
+        commit=None
+        if (source/'.git').exists():
+            _,value=self.command('git','-C',source,'rev-parse','HEAD',user='pi' if os.geteuid()==0 else None,timeout=15,check=False)
+            if re.fullmatch('[0-9a-f]{40}',value): commit=value
+        if not (source/'klippy/klippy.py').is_file() or not (env/'bin/python').exists():
+            return {'state':'missing','commit':commit,'reason':'Missing Klipper entry point or Python environment'}
+        try:
+            code,out=self.command(env/'bin/python','-B',source/'klippy/klippy.py','--help',user='pi' if os.geteuid()==0 else None,timeout=30,check=False,env={'PYTHONDONTWRITEBYTECODE':'1'})
+        except Removed: raise
+        except (OSError,Refuse) as error:
+            return {'state':'corrupt','commit':commit,'reason':str(error)}
+        state='usable' if code==0 else 'corrupt'
+        return {'state':state,'entrypoint_exit':code,'commit':commit if re.fullmatch('[0-9a-f]{40}',commit) else None,
+                'reason':'Entry point imports/CLI succeeded' if code==0 else out[-1500:]}
 
     def ethernet_check(self):
         _, raw = self.command("ip", "-j", "route", "get", "1.1.1.1", timeout=15)
@@ -623,7 +650,11 @@ class Installer:
         if self.args.flash and not self.args.enable_flashing_capability:
             raise Refuse("--flash additionally requires --enable-flashing-capability")
         if self.args.flash:
-            self.flash_profile()  # Validate before stopping any services or installing packages.
+            try:
+                self.flash_profile()  # Eligibility precedes service/package/config changes.
+                self.report['flash_state']='ELIGIBLE_UNPROVEN'
+            except Refuse as error:
+                self.report.update(flash_state='INELIGIBLE',flash_reason=str(error))
 
     def bundle_file(self, relative, digest):
         require_digest(digest)
@@ -669,24 +700,34 @@ class Installer:
         chip = p.get("mcu")
         if chip not in ("stm32f446xx", "stm32f429xx", "stm32h723xx"):
             raise Refuse("V0.1 DFU supports explicitly verified STM32F446/F429/H723 profiles only")
-        device = select_usb(usb_devices(), p.get("dfu_usb"))
-        if (device["vid"], device["pid"]) != ("0483", "df11") or not device["serial"]:
+        try: device = select_usb(usb_devices(), p.get('dfu_usb'))
+        except Refuse:
+            if p.get('allow_bootloader_request') is not True: raise
+            device=select_usb(usb_devices(),p.get('normal_usb'))
+            if device.get('manufacturer')!='Klipper' or device.get('product')!=chip:
+                raise Refuse('Normal-mode MCU identity does not match selected build profile')
+        normal=(device['vid'],device['pid'])==('1d50','614e')
+        if not normal and not p.get('dfu_usb',{}).get('serial'):
+            raise Refuse('An already-DFU target requires an explicitly verified serial selector')
+        if not normal and ((device["vid"], device["pid"]) != ("0483", "df11") or not device["serial"]):
             raise Refuse("Requires unique STM32 ROM DFU serial and physical port; Katapult is unsupported")
-        if not p["dfu_usb"].get("serial") or device["port"] == self.guard.device["port"]:
+        if not device.get('serial') or device["port"] == self.guard.device["port"]:
             raise Refuse("DFU target must have explicit serial and be separate from trigger")
         config = self.bundle_file(p.get("build_config", ""), p.get("build_config_sha256"))
         text = config.read_text()
         boot = p.get("bootloader_kib")
-        if boot not in (32, 64, 128):
-            raise Refuse("No zero-offset or unverified bootloader profiles")
+        if boot != fp.profile(chip)['boot_kib']:
+            raise Refuse("Bootloader offset differs from reviewed Octopus MCU profile")
         required = ['CONFIG_MCU="' + chip + '"', "CONFIG_MACH_STM32=y", "CONFIG_USBSERIAL=y",
-                    "CONFIG_STM32_FLASH_START_%d=y" % (boot * 1024)]
+                    "CONFIG_STM32_FLASH_START_%X=y" % (boot * 1024)]
         for value in required:
             if value not in text.splitlines():
                 raise Refuse("MCU .config missing expected setting: " + value)
         clock = p.get("clock_config")
         if not isinstance(clock, str) or not re.fullmatch(r"CONFIG_STM32_CLOCK_REF_[A-Z0-9_]+=y", clock) or clock not in text.splitlines():
             raise Refuse("Require exact verified clock_config setting from .config")
+        if clock!='CONFIG_STM32_CLOCK_REF_%dM=y'%fp.profile(chip)['crystal_mhz']:
+            raise Refuse('Clock reference differs from reviewed Octopus MCU profile')
         address = 0x08000000 + boot * 1024
         if p.get("flash_address") != "0x%08x" % address:
             raise Refuse("Flash address does not match bootloader offset")
@@ -785,7 +826,7 @@ class Installer:
         self.change("Installed/updated required host packages; OS release/kernel upgrade not performed")
 
     def checkout(self, name):
-        revision = require_digest(self.c["revisions"][name], 40)
+        revision = require_digest(self.report.get('repair_revision') if name=='klipper' and self.report.get('repair_revision') else self.c["revisions"][name], 40)
         target = self.stage / name
         self.command("git", "-c", "core.hooksPath=/dev/null", "clone", "--no-checkout", "--filter=blob:none", REPOS[name], target, user="pi", timeout=600)
         self.command("git", "-C", target, "-c", "core.hooksPath=/dev/null", "checkout", "--detach", revision, user="pi", timeout=600)
@@ -805,13 +846,23 @@ class Installer:
         for name, venv, req in (("klipper", "klippy-env", "scripts/klippy-requirements.txt"),
                                 ("moonraker", "moonraker-env", "scripts/moonraker-requirements.txt"),
                                 ("KlipperScreen", ".KlipperScreen-env", "scripts/KlipperScreen-requirements.txt")):
+            if name=='klipper' and self.report.get('klipper_host_action')=='KEEP_EXISTING_KLIPPER':
+                self.change('Preserved usable installed Klipper: no verified board flash authorizes a host update')
+                continue
+            if name=='klipper' and self.report.get('klipper_host_promoted'):
+                paths.update(klipper=self.home/'klipper',**{'klippy-env':self.home/'klippy-env'})
+                continue
+            if name=='klipper' and hasattr(self,'prepared_klipper'):
+                paths.update(self.prepared_klipper); continue
+            if name=='klipper' and self.report.get('klipper_host_health',{}).get('state') in ('missing','corrupt'):
+                self.report['repair_revision']=self.report['klipper_host_health'].get('commit')
             check_free([self.home, "/var"])
             source = self.checkout(name)
             envdir = self.stage / venv
             self.venv(envdir, source / req, system=name == "KlipperScreen")
             paths[name] = source
             paths[venv] = envdir
-        if self.report["cartographer_present"] and self.c.get("cartographer", {}).get("install_plugin"):
+        if 'klippy-env' in paths and self.report["cartographer_present"] and self.c.get("cartographer", {}).get("install_plugin"):
             source = self.checkout("cartographer")
             self.command(paths["klippy-env"] / "bin/python", "-m", "pip", "install", source, user="pi", timeout=1200)
             self.command(paths["klippy-env"] / "bin/python", "-m", "pip", "install", "numpy>=1.16", user="pi", timeout=1200)
@@ -840,47 +891,56 @@ class Installer:
             raise Refuse("Mainsail zip has no root index.html")
         self.command("chown", "-R", "pi:pi", dest)
 
+    def prepare_klipper(self):
+        source=self.checkout('klipper')
+        environment=self.stage/'klippy-env'
+        self.venv(environment,source/'scripts/klippy-requirements.txt')
+        self.command(environment/'bin/python','-B',source/'klippy/klippy.py','--help',user='pi',timeout=30)
+        return {'klipper':source,'klippy-env':environment}
+
+    def repair_klipper_only(self):
+        health=self.report['klipper_host_health']
+        revision=health.get('commit')
+        if not revision:
+            self.report['repair_reason']='No known original host revision; cannot automatically repair after an unverified flash'
+            return False
+        self.report['repair_revision']=revision
+        old_stage=self.stage
+        self.stage=old_stage/'host-repair'
+        self.user_directory(self.stage)
+        try:
+            paths=self.prepare_klipper()
+            for name,path in paths.items(): self.activate_path(self.home/name,path)
+            self.report['repair_completed_revision']=revision
+            self.change('Repaired missing/corrupt Klipper at the known original revision; services remain stopped')
+            return True
+        finally: self.stage=old_stage
+
     def flash(self, klipper):
         if not self.args.enable_flashing_capability or not self.args.flash:
-            raise Refuse("Firmware write requires both --enable-flashing-capability and --flash")
-        p, device, config = self.flash_profile()
-        build_config = klipper / ".config"
-        atomic_write(build_config, config.read_bytes(), self.guard, 0o644)
-        self.command("chown", "pi:pi", build_config)
-        self.command("make", "olddefconfig", cwd=klipper, user="pi", timeout=120)
-        # Kconfig normalization must not silently change the critical profile values.
-        normalized = read(build_config).splitlines()
-        original = config.read_text().splitlines()
-        critical = [x for x in original if x.startswith(("CONFIG_MCU=", "CONFIG_STM32_FLASH_START_", "CONFIG_STM32_CLOCK_REF_", "CONFIG_USBSERIAL=")) and not x.startswith("#")]
-        if not all(x in normalized for x in critical):
-            raise Refuse("Kconfig changed a critical MCU profile setting")
-        self.command("make", "-j2", cwd=klipper, user="pi", timeout=1200)
-        firmware = klipper / "out/klipper.bin"
-        if not firmware.is_file() or not 1024 < firmware.stat().st_size < 2 * MIB:
-            raise Refuse("Invalid firmware image")
-        # Read target identity and alternate memory descriptors; never use VID:PID alone.
-        _, listing = self.command("dfu-util", "--list", timeout=15)
-        serial = device["serial"]
-        selected = [x for x in listing.splitlines() if ('serial="' + serial + '"') in x and "alt=0" in x]
-        if len(selected) != 1 or "Internal Flash" not in selected[0]:
-            raise Refuse("DFU internal-flash alternate not uniquely verified")
-        self.flash_profile()  # Re-match physical port/serial immediately before write.
-        atomic_write(self.state / "FIRMWARE_WRITE_STARTED", json.dumps({"profile": p, "sha256": sha256(firmware)}, indent=2), self.guard)
-        self.report["firmware_write_started"] = True
-        self.save_report()
-        # No mass erase. This operation is inherently non-transactional.
-        self.command("dfu-util", "--device", "0483:df11", "--serial", serial, "--alt", "0",
-                     "--dfuse-address", p["flash_address"] + ":leave", "--download", firmware, timeout=180)
-        self.change("Wrote Octopus firmware from pinned Klipper source; awaiting normal enumeration")
-        deadline = time.monotonic() + 45
-        while time.monotonic() < deadline:
-            self.guard.check()
-            try:
-                select_usb(usb_devices(), p["normal_usb"])
-                return
-            except Refuse:
-                self.guard.cancelled.wait(0.2)
-        raise Refuse("MCU did not enumerate normally; check BOOT jumper/reset and recovery instructions")
+            raise Refuse('Firmware write requires capability and --flash')
+        p,device,config=self.flash_profile()
+        artifact=self.stage/'firmware-artifact'
+        self.command('python3','-B',Path(__file__).with_name('build_firmware.py'),'--source',klipper,'--chip',p['mcu'],'--output',artifact,user='pi',timeout=1500)
+        metadata,profile,dictionary=fp.artifact(artifact)
+        environment=self.stage/'klippy-env'
+        def inactive():
+            if self.systemd_state('klipper').get('ActiveState')!='inactive':
+                raise Refuse('Klipper must remain inactive through DFU')
+        def identify(path,reset=False):
+            inactive()
+            extra=['--reset-after-identify','--expected-dictionary-sha256',metadata['sha256']['klipper.dict']] if reset else []
+            _,out=self.command(environment/'bin/python','-B',Path(__file__).with_name('mcu_identify.py'),'--klippy',klipper/'klippy','--serial',path,*extra,timeout=25)
+            values=[json.loads(line.split(' ',1)[1]) for line in out.splitlines() if line.startswith('MCU_IDENTIFY_JSON ')]
+            if len(values)!=1: raise Refuse('Expected one live MCU dictionary')
+            return values[0]
+        import octopus_flasher
+        transaction=octopus_flasher.Transaction(self.guard,self.runner,self.state,inactive,identify,lambda path:identify(path,reset=True))
+        self.report['flash_transaction']=transaction.result
+        transaction.execute(artifact,device,expected_normal_serial=p['normal_usb']['serial'],allow_request=p.get('allow_bootloader_request') is True)
+        self.report['flash_state']='VERIFIED'
+        self.report['klipper_host_action']=fp.host_action('usable','VERIFIED')
+        self.change('Read-back, bootloader and post-MCU-reset firmware identity verified before host activation')
 
     def activate_path(self, destination, source):
         self.guard.check()
@@ -932,6 +992,7 @@ class Installer:
         self.report['config_changes']=changed
         for name in changed: self.change('Installed missing/older '+self.config_plan['profile']+' configuration: '+name)
         for name, path in paths.items():
+            if self.report.get('klipper_host_promoted') and name in ('klipper','klippy-env'): continue
             self.activate_path(self.home / name, path)
         self.activate_path(self.home / "mainsail", self.stage / "mainsail")
         common = "\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n"
@@ -1154,6 +1215,12 @@ class Installer:
         supported_host(host)
         self.validate_layout()
         self.validate_manifest()
+        health=self.report.get('klipper_host_health',{'state':'usable'})
+        self.report['klipper_host_action']=fp.host_action(health['state'],self.report.get('flash_state','NOT_REQUESTED'))
+        if self.args.flash and self.report.get('flash_state')=='INELIGIBLE' and health['state'] not in ('missing','corrupt'):
+            self.report['status']='FLASH_SKIPPED_HOST_PRESERVED'
+            self.emit('Flash ineligible; installed Klipper remains unchanged: '+self.report.get('flash_reason',''))
+            return
         if self.args.allow_prune:
             if self.args.recovery_isolated:
                 raise Refuse("Pruning is disabled during offline/recovery installation")
@@ -1177,9 +1244,29 @@ class Installer:
         self.stop_stack(recovery=recovery)
         self.backup()
         self.install_packages(host)
-        paths = self.stage_stack()
+        if self.args.flash and self.report.get('flash_state')=='INELIGIBLE':
+            repaired=self.repair_klipper_only()
+            self.report['status']='FLASH_SKIPPED_HOST_REPAIRED_NOT_READY' if repaired else 'FLASH_SKIPPED_HOST_REPAIR_REQUIRED'
+            return
         if self.args.flash:
-            self.flash(paths["klipper"])
+            try:
+                self.prepared_klipper=self.prepare_klipper()
+                self.flash(self.prepared_klipper['klipper'])
+                if self.report.get('flash_state')!='VERIFIED': raise Refuse('No verified firmware receipt; host activation refused')
+            except Removed:
+                raise
+            except (Refuse,OSError,ValueError,KeyError) as error:
+                self.report.update(flash_state='FAILED',flash_reason=str(error),status='FLASH_FAILED_HOST_PRESERVED')
+                self.report['klipper_host_action']=fp.host_action(health['state'],'FAILED')
+                self.emit('Flash/build/verification failed; no installed host update or dependent config/software activation: '+str(error))
+                if health['state'] in ('missing','corrupt'):
+                    repaired=self.repair_klipper_only()
+                    self.report['status']='FLASH_FAILED_HOST_REPAIRED_NOT_READY' if repaired else 'FLASH_FAILED_HOST_REPAIR_REQUIRED'
+                return
+            for name,path in self.prepared_klipper.items(): self.activate_path(self.home/name,path)
+            self.report['klipper_host_promoted']=True
+            self.change('Activated matching Klipper source/environment only after successful board verification')
+        paths = self.stage_stack()
         self.activate_stack(paths)
         self.configure_wifi()
         self.trim_services()

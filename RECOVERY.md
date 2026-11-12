@@ -39,7 +39,11 @@
    heater power isolated. Follow the exact inspected Octopus revision's BOOT/
    reset/power instructions from its manufacturer. Re-enter STM32 ROM DFU and
    use the verified profile's nonzero application offset and known-good firmware.
-   This tool does not back up MCU flash or restore a damaged bootloader. If
+   v0.5 records full mapped MCU flash in flash-before.bin plus SHA-256 before
+   application download; flash-after.bin and flash-result.json record read-back
+   and reset proof. Also inspect HOST_PROMOTION_INTENT.json and retained source
+   when artifact-mode host promotion was requested. The backup is not an
+   automatic rollback or a generic bootloader repair file. If
    ROM DFU does not work, use the manufacturer's SWD/recovery procedure with
    qualified supervision. Do not infer an MCU from `0483:df11`.
 9. Restore power/start services only under supervision, inspect the display,

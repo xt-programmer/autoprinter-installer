@@ -14,6 +14,12 @@ import autoprinter as ap
 
 
 class AccessoryPolicyTests(unittest.TestCase):
+    def test_camera_eoi_allows_only_bounded_zero_padding(self):
+        frame=b'\xff\xd8frame\xff\xd9'
+        for pad in (b'',b'\x00',b'\x00'*16): self.assertTrue(p.complete_jpeg(frame+pad))
+        for bad in (frame+b'\x00'*17,frame+b'X',frame[:-2],b'not-a-jpeg\xff\xd9'):
+            self.assertFalse(p.complete_jpeg(bad))
+
     def snapshot(self):
         return {'usb':[], 'usb_webcam':[], 'cartographer':[]}
 

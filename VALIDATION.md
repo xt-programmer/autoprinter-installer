@@ -1,4 +1,43 @@
-# Validation record - v0.4.0
+# Validation record - v0.5.0
+
+12 November 2026: early flash eligibility/host-retention gate, three verified
+STM32 build profiles, full flash backup/read-back/reset proof, artifact-only
+programming and one-shot HID command generation.
+
+- 149 tests discovered on Windows: 145 passed, four POSIX-only tests skipped.
+  Linux CI runs the entire suite on Python 3.9, 3.12 and 3.14.
+- All three real pinned firmware bundles were compiled in isolated CI:
+  [firmware run 43201247770](https://github.com/xt-programmer/autoprinter-installer/actions/runs/43201247770).
+  Config/image/vector/dictionary/source hashes are validated in the suite.
+- One H723 Octopus Pro application write completed on the USB-powered Orange
+  Pi 3 LTS bench. A full 1 MiB backup/read-back, unchanged 128 KiB bootloader,
+  exact application bytes and dictionary before/after explicit reset passed.
+  Matching host source was promoted to 29d4ec2d6d840ee839333306003a400da186d41d
+  only after proof; prior source retained, existing native environment unchanged.
+- Initial soft-DFU request HUP and post-DFU udev link delay were fixed. The
+  physical transaction required supervised verification continuation without
+  another firmware download. This is one write, not a clean one-shot CLI test.
+  The corrected complete CLI still needs a fresh hardware run. F446/F429 have
+  compile/policy validation, not physical flash validation here.
+- Failure/removal tests verify one write at most, no leave/promotion after
+  failed read-back/dictionary/reset, preserved bootloader, healthy-host hold,
+  known-original repair exception and cancellation without repair fallback.
+- HID tests cover exactly one HID interface/identity, product/serial mismatch,
+  ambiguity/missing trigger, conflicting selectors, frozen enumeration handover,
+  printable shell arguments, no implicit flash/apply, manual Enter by default,
+  one-shot execution and ATtiny flash-storage/polling generation. No physical
+  Flipper or ATtiny keystrokes have been exercised. ATtiny compilation remains
+  pending with the actual board/core/library.
+- Post-flash camera responses exposed UVC JPEG EOI followed by one zero-padding
+  byte; marker checks now allow at most 16 trailing zero bytes and reject
+  truncation/other padding. No camera image was saved. This is a marker/transport
+  check, not an image-decoder or optics test.
+- Klipper remains inactive/disabled without commissioned printer.cfg. No motion,
+  heater, calibration, cold power-cycle, Pi reboot or physical HDMI test occurred.
+  Reference printers remained read-only. The bench's retained source reduces
+  current free space below the 3 GiB entry gate for a new apply transaction.
+
+# Earlier validation record - v0.4.0
 
 12 November 2026: added exact operator macro/settings baselines (Cartographer
 6.5, manual-Z 5.6), a first-three-lines numeric version policy, backups/journal,
