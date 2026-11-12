@@ -3,8 +3,9 @@
 12 November 2026: automatic private BadUSB console login without a resident
 worker, manual Enter, pre-login, autologin policy or sudoers modification.
 
-- Windows: 160 discovered, 156 passed, four POSIX-only skips. Linux CI runs all
-  tests on Python 3.9/3.12/3.14. New tests cover exact tty/pi checks, credential
+- Windows: 160 discovered, 156 passed, four POSIX-only skips.
+  [All 160 passed in Linux CI on Python 3.9/3.12/3.14](https://github.com/xt-programmer/autoprinter-installer/actions/runs/43233546675).
+  New tests cover exact tty/pi checks, credential
   input validation, private sudo pipe, stale enumeration before root/network,
   hash failure before sudo, argument restrictions, automatic Enter/hotkey,
   bounded capsule lines, deterministic helper bytes, no credential output,

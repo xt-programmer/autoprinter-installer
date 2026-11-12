@@ -1,8 +1,8 @@
 #!/bin/sh
-# Auto-generated for xt-programmer/autoprinter-installer v0.5.0; payload pinned below.
+# Auto-generated for xt-programmer/autoprinter-installer v0.6.0; payload pinned below.
 set -eu
 command -v python3 >/dev/null 2>&1 || { echo 'Python 3.9+ is required' >&2; exit 2; }
-exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.5.0/auto-installer-v0.5.zip --sha256 01ca1913c777bf98d343789fcb85b69a57bc42710ceb904aa27f838f0bcaa611 "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
+exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.6.0/auto-installer-v0.6.zip --sha256 2e37c39a699bc6455cf3420a06149188848c09fd79d232fd6a55f57042f375bb "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
 #!/usr/bin/env python3
 """Download and run a SHA-256-pinned AutoPrinter release.
 
@@ -198,6 +198,12 @@ def main(argv=None):
     identity = None
     if args.usb_port:
         device, identity = resolved_hid or usb_identity(args.usb_port, args.usb_vid, args.usb_pid, args.usb_serial)
+        inherited = os.environ.get('AUTOPRINTER_TRIGGER_SESSION')
+        if inherited:
+            session={'port':args.usb_port,'vid':identity['idVendor'],'pid':identity['idProduct'],
+                     'serial':identity['serial'],'busnum':identity['busnum'],'devnum':identity['devnum']}
+            if json.loads(inherited)!=session:
+                raise RuntimeError('USB trigger changed before downloader startup')
         presence = Presence(device, identity).start()
     check = presence.check if presence else lambda: None
     try:

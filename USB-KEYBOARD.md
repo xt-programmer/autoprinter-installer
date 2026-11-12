@@ -42,7 +42,7 @@ No custom Flipper firmware is required.
 ## Automatic sequence
 
 Wait for USB; send Ctrl+Alt+F3; wait five seconds; type `pi`; wait 2.5 seconds;
-type the supplied password; wait twelve seconds for the shell. Disable history
+type the supplied password; wait twenty seconds for the shell. Disable history
 for this temporary shell, transfer a compact capsule in short lines, then run
 it with Enter. There is no manual login or sudo confirmation on the printer.
 
@@ -82,6 +82,7 @@ python3 make_hid.py --device flipper --console-login --password-file pi-password
 `--vt 2` through `--vt 6` selects a different **known fresh** spare console.
 Output files must not already exist. `--launcher-sha256` adds a pin for the
 tag's install.sh; the ready private test kit includes that pin.
+`--login-wait-ms` can increase the shell-startup wait for a slower image.
 
 Accessory apply on an inspected native KIAUH installation:
 
@@ -109,6 +110,8 @@ stopped for commissioning. Automatic launch does not assert display/machine
 confirmations. `--enable-flashing-capability` alone never writes; actual writes
 need `--flash` and [BOARD-FLASH.md](BOARD-FLASH.md)'s independent target/profile
 gates. A healthy Klipper is held unless the requested board write verifies.
+The bench's Ubuntu 26.04 is experimental in accessory mode; it remains outside
+the full-stack OS allowlist.
 
 ## Trigger / ATtiny / existing-shell alternatives
 

@@ -100,11 +100,12 @@ void loop() { DigiKeyboard.delay(1000); }
     return sketch, typed
 
 
-def console_payload(device, mode, password, extra=(), vt=3, vid=None, pid=None, serial=None, launcher_sha256=None):
+def console_payload(device, mode, password, extra=(), vt=3, vid=None, pid=None, serial=None, launcher_sha256=None, login_wait_ms=20000):
     """Private automatic-login payload. tty must initially be at a fresh getty."""
     import console_launch
     flags,vid,pid=invocation(mode,device,extra,vid,pid,serial)
     if type(vt)!=int or not 2<=vt<=6: raise ValueError('Use a spare console tty2..tty6')
+    if type(login_wait_ms)!=int or not 5000<=login_wait_ms<=120000: raise ValueError('Login wait must be 5000..120000 ms')
     if not isinstance(password,str) or not 1<=len(password)<=128 or any(not 32<=ord(c)<=126 for c in password):
         raise ValueError('Password must be a single printable ASCII line')
     if launcher_sha256 is not None and not re.fullmatch('[0-9a-f]{64}',launcher_sha256):
@@ -167,7 +168,7 @@ sys.exit(ns['launch'](r))
     boot="import os,base64,zlib;exec(zlib.decompress(base64.b64decode(os.environ.pop('AP_AUTOPRINTER_CAPSULE'))))"
     texts.append('python3 -c '+shlex.quote(boot)+'; ap_rc=$?; unset AP_AUTOPRINTER_CAPSULE; printf "\\nAutoPrinter exit=%s\\n" "$ap_rc"; sleep 15; exit "$ap_rc"')
     events=[('delay',3000),('key','CTRL ALT F'+str(vt)),('delay',5000),('text','pi'),('key','ENTER'),
-            ('delay',2500),('text',password),('key','ENTER'),('delay',12000)]
+            ('delay',2500),('text',password),('key','ENTER'),('delay',login_wait_ms)]
     for text in texts: events += [('text',text),('key','ENTER'),('delay',250)]
     if device=='flipper':
         lines=['ID %s:%s AutoPrinter:Supervised launcher'%(vid,pid),
@@ -205,6 +206,7 @@ def main(argv=None):
     parser.add_argument('--password-file',type=Path,help='single-line pi password; copied into private generated payload')
     parser.add_argument('--vt',type=int,default=3,help='spare fresh Linux login console, default tty3')
     parser.add_argument('--launcher-sha256',help='optional additional pin for the tag launcher')
+    parser.add_argument('--login-wait-ms',type=int,default=20000,help='console shell startup wait, 5000..120000 ms')
     parser.add_argument('arguments', nargs=argparse.REMAINDER, help='installer arguments after --')
     args = parser.parse_args(argv)
     extra = args.arguments[1:] if args.arguments[:1] == ['--'] else args.arguments
@@ -212,7 +214,7 @@ def main(argv=None):
         if args.console_login:
             if args.password_file is None: raise ValueError('--console-login requires --password-file')
             password=args.password_file.read_text(encoding='utf-8').rstrip('\r\n')
-            content=console_payload(args.device,args.mode,password,extra,args.vt,args.vid,args.pid,args.serial,args.launcher_sha256)
+            content=console_payload(args.device,args.mode,password,extra,args.vt,args.vid,args.pid,args.serial,args.launcher_sha256,args.login_wait_ms)
             typed=None
         else:
             if args.password_file or args.launcher_sha256: raise ValueError('Credential/hash options require --console-login')

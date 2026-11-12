@@ -456,7 +456,8 @@ is required. Re-arm before each new connection. ATtiny runs once on insertion.
 Automatic order:
 1. Wait 3 seconds after USB connection; send Ctrl+Alt+F3 (or selected tty2..6).
 2. Wait 5 seconds; type pi and Enter. Wait 2.5 seconds; type supplied password
-   and Enter. Wait 12 seconds for shell. No sudo/login prompts are answered by
+   and Enter. Wait 20 seconds for shell (configurable via --login-wait-ms).
+   No sudo/login prompts are answered by
    later guessed keystrokes. Incorrect initial console state is a known limit.
 3. Unset HISTFILE and disable history for this temporary Bash shell. Transfer
    a compact capsule as base64 literals in short lines, avoiding the Linux tty

@@ -76,6 +76,7 @@ class ConsoleTests(unittest.TestCase):
         for secret in ('','x\nENTER','x\tX','\u00e9'):
             with self.assertRaises(ValueError): make_hid.console_payload('flipper','inventory',secret)
         with self.assertRaises(ValueError): make_hid.console_payload('flipper','inventory','test',vt=7)
+        with self.assertRaises(ValueError): make_hid.console_payload('flipper','inventory','test',login_wait_ms=0)
         with self.assertRaises(ValueError): make_hid.console_payload('flipper','board-flash','test',['--flash'])
 
     def test_digispark_automatic_login_is_one_shot_and_flash_stored(self):
