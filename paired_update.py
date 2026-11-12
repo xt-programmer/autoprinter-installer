@@ -17,7 +17,7 @@ import octopus_flasher as of
 
 
 def protocol_error(message):
-    return bool(re.search(r'\bMCU Protocol error\b|\bCommand format mismatch\b',message,re.I))
+    return bool(re.search(r'^(?:[a-z_][\w.]*\.error: )?(?:MCU Protocol error\b|Protocol error(?:$|:)|Command format mismatch\b)',message,re.I|re.M))
 
 
 def native_launch(props,env_path=Path('/home/pi/printer_data/systemd/klipper.env')):

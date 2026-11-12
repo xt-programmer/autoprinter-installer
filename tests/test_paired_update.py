@@ -220,6 +220,9 @@ class LifecycleTests(unittest.TestCase):
 class EntryTests(unittest.TestCase):
     def test_unknown_gcode_is_not_an_mcu_protocol_error(self):
         self.assertFalse(paired.protocol_error('Unknown command: "TIMELAPSE_TAKE_FRAME"'))
+        self.assertFalse(paired.protocol_error('# MCU Protocol error mentioned in a config comment'))
+        self.assertTrue(paired.protocol_error('Protocol error\nTraceback (most recent call last):'))
+        self.assertTrue(paired.protocol_error('msgproto.error: Command format mismatch: get_config'))
         self.assertTrue(paired.protocol_error('MCU Protocol error: Unknown command'))
 
     def test_external_plugin_bytes_are_preserved_and_changes_detected(self):

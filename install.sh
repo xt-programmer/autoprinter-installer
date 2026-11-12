@@ -1,8 +1,8 @@
 #!/bin/sh
-# Auto-generated for xt-programmer/autoprinter-installer v0.6.2; payload pinned below.
+# Auto-generated for xt-programmer/autoprinter-installer v0.7.0; payload pinned below.
 set -eu
 command -v python3 >/dev/null 2>&1 || { echo 'Python 3.9+ is required' >&2; exit 2; }
-exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.6.2/auto-installer-v0.6.2.zip --sha256 916a270bac5e710059b17255143848f8df02bc55759651e31df40b7fd6f9225d "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
+exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.7.0/auto-installer-v0.7.zip --sha256 8085f068448f465f44d65095fec06aa96d7d57b62788bcee189ee9190d2afbaf "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
 #!/usr/bin/env python3
 """Download and run a SHA-256-pinned AutoPrinter release.
 
@@ -156,6 +156,7 @@ def main(argv=None):
     parser.add_argument("--peripherals", action="store_true", help="existing KIAUH accessory plan/setup; no MCU operations")
     parser.add_argument("--configs", action="store_true", help="only versioned macros/settings plan/setup; no services/packages/MCU changes")
     parser.add_argument('--board-flash',action='store_true',help='separate exact-target board audit/flash transaction')
+    parser.add_argument('--klipper-update-only',action='store_true',help='only Klipper and board, with DFU gate and protocol-error recovery')
     parser.add_argument("--usb-port", help="explicit physical trigger port from inventory")
     parser.add_argument("--usb-vid", help="optional expected vendor ID")
     parser.add_argument("--usb-pid", help="optional expected product ID")
@@ -175,7 +176,8 @@ def main(argv=None):
         parser.error("Expected exact trusted SHA-256 checksum")
     if urllib.parse.urlsplit(args.url).scheme != "https":
         parser.error("Only HTTPS download URLs are supported")
-    if sum([args.peripherals,args.configs,args.board_flash])>1: parser.error('Choose one specialized mode')
+    if sum([args.peripherals,args.configs,args.board_flash,args.klipper_update_only])>1: parser.error('Choose one specialized mode')
+    if args.klipper_update_only: forwarded=['--klipper-update-only']+forwarded
     resolved_hid = None
     if any(x is not None for x in (args.hid_vid, args.hid_pid, args.hid_serial, args.hid_product)):
         if not args.hid_vid or not args.hid_pid:
@@ -185,7 +187,7 @@ def main(argv=None):
         resolved_hid = hid_identity(args.hid_vid, args.hid_pid, args.hid_serial, args.hid_product)
         args.usb_port = resolved_hid[0].name
         print('HID trigger resolved to physical port ' + args.usb_port, flush=True)
-    special_mode=args.peripherals or args.configs or args.board_flash
+    special_mode=args.peripherals or args.configs or args.board_flash or args.klipper_update_only
     if not forwarded and not special_mode:
         forwarded = ["--inventory"] if not args.usb_port else []
     peripheral_audit = special_mode and '--apply' not in forwarded
@@ -234,7 +236,7 @@ def main(argv=None):
             raise RuntimeError("Bundle checksum mismatch; nothing executed")
         dest = work / "bundle"
         unpack(archive, dest, check)
-        entrypoint = 'board_flash.py' if args.board_flash else "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
+        entrypoint = 'board_flash.py' if args.board_flash or args.klipper_update_only else "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
         scripts = list(dest.glob("*/"+entrypoint)) + list(dest.glob(entrypoint))
         if len(scripts) != 1:
             raise RuntimeError("Bundle must have one AutoPrinter entry point at root or one directory deep")

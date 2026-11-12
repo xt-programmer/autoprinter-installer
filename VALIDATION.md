@@ -2,6 +2,9 @@
 
 12 November 2026: Klipper/board-only transaction and protocol-error downgrade.
 
+- Linux CI (Python 3.9/3.12/3.14): 204 passed on each; source run
+  https://github.com/xt-programmer/autoprinter-installer/actions/runs/43261000316 .
+  Actual pinned host core formats also matched all three bundled dictionaries.
 - Windows suite: 204 tests discovered; 200 passed, four POSIX-only skips.
   Failure injection verifies DFU failure holds the host gate; one application
   restoration exactly recovers the whole old flash; changed target, backup,
