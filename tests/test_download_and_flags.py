@@ -88,6 +88,7 @@ class DownloadTests(unittest.TestCase):
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, "w") as z:
             z.writestr("auto-installer-v0.2/autoprinter.py", "# test fixture only\n")
+            z.writestr("auto-installer-v0.2/peripherals.py", "# accessory fixture only\n")
             z.writestr("auto-installer-v0.2/manifest.json", "{}")
         return stream.getvalue()
 
@@ -117,6 +118,21 @@ class DownloadTests(unittest.TestCase):
     def test_bad_hash_never_executes_payload(self):
         with tempfile.TemporaryDirectory() as t, self.assertRaises(RuntimeError):
             self.invoke(Path(t), checksum="0" * 64)
+
+    def test_peripheral_audit_selects_accessory_entrypoint_without_apply(self):
+        with tempfile.TemporaryDirectory() as t:
+            execute=self.invoke(Path(t), ['--peripherals'])
+            command=execute.call_args.args[1]
+            self.assertTrue(command[1].endswith('peripherals.py'))
+            self.assertNotIn('--apply',command)
+
+    def test_peripheral_ssh_is_explicit_and_preserves_pid_argument(self):
+        with tempfile.TemporaryDirectory() as t:
+            execute=self.invoke(Path(t), ['--peripherals','--supervised-ssh','--ssh-session-pid','123','--apply'])
+            command=execute.call_args.args[1]
+            self.assertTrue(command[1].endswith('peripherals.py'))
+            self.assertIn('--ssh-session-pid',command)
+            self.assertIn('123',command)
 
     def test_apply_without_usb_refuses_before_download(self):
         with patch.object(bootstrap.sys, "platform", "linux"), patch.object(bootstrap.urllib.request, "build_opener") as opener, contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):

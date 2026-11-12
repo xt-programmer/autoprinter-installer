@@ -12,7 +12,7 @@
   "console_progress": true,
   "disable_wifi": true,
   "disable_services": [],
-  "mainsail_port": 8080,
+  "mainsail_port": 80,
   "prune_older_days": 90,
   "required_config": ["macros500", "settings500"],
   "revisions": {

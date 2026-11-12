@@ -1,4 +1,40 @@
-# Validation record — v0.2.1
+# Validation record — v0.3.0
+
+12 November 2026: native KIAUH layout on Orange Pi 3 LTS, aarch64,
+Armbian/Ubuntu 26.04, kernel 6.18.44 and Python 3.14.4.
+
+- Crowsnest v5.0.12 (`436042452f564f3d737e3b980a213f849a8a0562`),
+  official installer and its ustreamer build fallback, installed and running.
+- Logitech C270 stable USB capture path selected; SoC video0/video1 excluded.
+  Complete JPEG received through the port-80 Mainsail webcam proxy. Camera
+  registered in Moonraker; no captured image saved.
+- KlipperScreen (`26d262522b9bd9fe7d67f67d3c6f90aa156d1b07`), native
+  environment/service and original requirements, including PyGObject 3.50.2,
+  built and imported successfully on Python 3.14. Full GUI ran for 25 seconds
+  under Xvfb, connected to Moonraker and displayed the expected disconnected
+  Klipper state. Timeout exit 124 was intentional test termination.
+- Physical HDMI disconnected. Enabled native service correctly skipped startup
+  through its display-presence condition. Physical display output remains pending.
+- Live `peripherals.py --apply` completed against the installed native layout,
+  preserved port 80/network, checked camera JPEG and returned no Moonraker warnings.
+- Cartographer absent from current USB and retained kernel evidence, so its
+  installer/source/dependencies were skipped. Positive detection, latching,
+  legacy migration refusal and unrelated H723/DFU exclusions have policy tests;
+  the positive installation path still needs an actual probe bench test.
+- H723 Octopus enumerated normally as a Klipper USB MCU; no serial interaction,
+  reset/flash, printer configuration, motor/heater commands or reboot occurred.
+  Klipper remains inactive/disabled, without printer.cfg.
+- Windows suite: 93 discovered, 90 passed and 3 Linux-only tests skipped.
+  All 93 passed on the physical Linux Pi, including process-group cancellation
+  and directory fsync. Native port-80 preservation, nginx syntax, HTTP assets
+  and WebSocket JSON-RPC were also verified live. CI includes Python 3.9,
+  3.12 and 3.14.
+
+This is one host/peripheral combination, not a compatibility matrix or a printer
+readiness claim. Initial native software setup and subsequent repair were both
+exercised; the complete fresh accessory CLI flow still needs a clean-image run.
+
+# Earlier validation record — v0.2.1
 
 Prepared 10 November 2026. Test host: Windows, Python 3.12.14.
 

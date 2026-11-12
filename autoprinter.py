@@ -28,7 +28,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-VERSION = "0.2.1"
+VERSION = "0.3.0"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 REPOS = {
@@ -939,14 +939,25 @@ class Installer:
         self.change("Activated staged host files; retained prior source trees and environments")
 
     def install_nginx(self):
-        # A separate port avoids replacing an existing MainsailOS/other site's configuration.
-        port = self.c.get("mainsail_port", 8080)
-        if not isinstance(port, int) or isinstance(port, bool) or not 1024 <= port <= 65535 or port == 7125:
-            raise Refuse("mainsail_port must be an unprivileged port other than Moonraker's")
+        port = self.c.get("mainsail_port", 80)
+        if not isinstance(port, int) or isinstance(port, bool) or not (port == 80 or 1024 <= port <= 65535) or port == 7125:
+            raise Refuse("mainsail_port must be 80 or an unprivileged port other than Moonraker's")
+        native = Path('/etc/nginx/sites-enabled/mainsail')
+        if port == 80 and native.exists():
+            text = native.read_text()
+            if not (re.search(r'listen\s+80\s*;',text) and re.search(r'root\s+/home/pi/mainsail\s*;',text) and 'location /websocket' in text and 'location /webcam/' in text):
+                raise Refuse('Existing Mainsail nginx site requires review')
+            self.command('nginx','-t',timeout=15)
+            self.command('systemctl','reload-or-restart','nginx',timeout=30)
+            self.change('Preserved native KIAUH Mainsail port-80 site and webcam proxy')
+            return
+        if port == 80 and any(Path('/etc/nginx/sites-enabled').glob('*')):
+            raise Refuse('Port-80 site already exists; review and adopt it explicitly before installation')
         target = Path("/etc/nginx/conf.d/autoprinter-mainsail.conf")
         content = ("# Managed by AutoPrinter; prior version is in backup.tar\nserver {\n listen " + str(port) + ";\n server_name _;\n root /home/pi/mainsail;\n index index.html;\n client_max_body_size 0;\n location / { try_files $uri $uri/ /index.html; }\n location /websocket {\n  proxy_pass http://127.0.0.1:7125/websocket;\n  proxy_http_version 1.1;\n  proxy_set_header Upgrade $http_upgrade;\n  proxy_set_header Connection \"upgrade\";\n  proxy_read_timeout 86400;\n }\n location ~ ^/(printer|api|access|machine|server)(/|$) {\n  proxy_pass http://127.0.0.1:7125;\n  proxy_set_header Host $host;\n  proxy_set_header X-Real-IP $remote_addr;\n  proxy_set_header X-Forwarded-For $remote_addr;\n }\n}\n")
         if target.exists() and not read(target).startswith("# Managed by AutoPrinter"):
             raise Refuse("Existing unrecognized nginx file")
+        content = content[:-2] + ' location /webcam/ {\n  proxy_buffering off;\n  proxy_pass http://127.0.0.1:8080/;\n }\n}\n'
         # Every path to the assets must be world-traversable, without changing home permissions.
         for p in (self.home, self.home / ".autoprinter", self.stage):
             if p.stat().st_mode & 0o001 == 0:
@@ -1099,7 +1110,7 @@ class Installer:
         if missing:
             raise Refuse("Required files missing: " + str(missing))
         self.command("curl", "--fail", "--silent", "--show-error", "--max-time", "5", "--output", "/dev/null",
-                     "http://127.0.0.1:%d/" % self.c.get("mainsail_port", 8080), timeout=10)
+                     "http://127.0.0.1:%d/" % self.c.get("mainsail_port", 80), timeout=10)
         self.report["status"] = "SOFTWARE_READY"
         self.report["warnings"].append("No motion/heating/endstop test performed. SOFTWARE_READY is not a physical safety certification.")
 

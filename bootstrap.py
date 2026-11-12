@@ -112,6 +112,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--url", required=True)
     parser.add_argument("--sha256", required=True)
+    parser.add_argument("--peripherals", action="store_true", help="existing KIAUH accessory plan/setup; no MCU operations")
     parser.add_argument("--usb-port", help="explicit physical trigger port from inventory")
     parser.add_argument("--usb-vid", help="optional expected vendor ID")
     parser.add_argument("--usb-pid", help="optional expected product ID")
@@ -127,9 +128,11 @@ def main(argv=None):
         parser.error("Expected exact trusted SHA-256 checksum")
     if urllib.parse.urlsplit(args.url).scheme != "https":
         parser.error("Only HTTPS download URLs are supported")
-    if not forwarded:
+    if not forwarded and not args.peripherals:
         forwarded = ["--inventory"] if not args.usb_port else []
-    if not args.usb_port and (forwarded != ["--inventory"] or any(x is not None for x in (args.usb_vid, args.usb_pid, args.usb_serial))):
+    peripheral_audit = args.peripherals and not forwarded
+    peripheral_ssh = args.peripherals and "--supervised-ssh" in forwarded
+    if not args.usb_port and not (peripheral_audit or peripheral_ssh) and (forwarded != ["--inventory"] or any(x is not None for x in (args.usb_vid, args.usb_pid, args.usb_serial))):
         parser.error("Maintenance/audit needs --usb-port. First run with --inventory to choose the trigger port")
     if "--inventory" in forwarded and any(x in forwarded for x in ("--apply", "--verify", "--flash", "--allow-prune", "--recovery-isolated")):
         parser.error("Inventory cannot be combined with maintenance")
@@ -167,7 +170,8 @@ def main(argv=None):
             raise RuntimeError("Bundle checksum mismatch; nothing executed")
         dest = work / "bundle"
         unpack(archive, dest, check)
-        scripts = list(dest.glob("*/autoprinter.py")) + list(dest.glob("autoprinter.py"))
+        entrypoint = "peripherals.py" if args.peripherals else "autoprinter.py"
+        scripts = list(dest.glob("*/"+entrypoint)) + list(dest.glob(entrypoint))
         if len(scripts) != 1:
             raise RuntimeError("Bundle must have one AutoPrinter entry point at root or one directory deep")
         command = [sys.executable, str(scripts[0])]

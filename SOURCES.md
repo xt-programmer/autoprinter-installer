@@ -14,6 +14,9 @@ These links may evolve; actual installation uses manifest commit/release pins.
 - [KlipperScreen installation](https://github.com/KlipperScreen/KlipperScreen/blob/master/docs/Installation.md)
 - [KlipperScreen X11/service start script](https://github.com/KlipperScreen/KlipperScreen/blob/master/scripts/KlipperScreen-start.sh)
 - [Mainsail releases](https://github.com/mainsail-crew/mainsail/releases)
+- [Crowsnest installation](https://docs.mainsail.xyz/crowsnest/setup/installation/)
+- [Crowsnest v5 source](https://github.com/mainsail-crew/crowsnest/tree/v5)
+- [Moonraker webcam configuration](https://moonraker.readthedocs.io/en/latest/configuration/#webcam)
 - [Cartographer current Klipper setup](https://docs.cartographer3d.com/cartographer-probe/installation-and-setup/software-configuration/klipper-setup/)
 - [Cartographer installer source](https://github.com/Cartographer3D/cartographer3d-plugin/blob/main/scripts/install.sh)
 - [NetworkManager nmcli reference](https://networkmanager.dev/docs/api/latest/nmcli.html) — optional Wi-Fi radio enable using the existing manager

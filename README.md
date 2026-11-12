@@ -1,14 +1,15 @@
-# AutoPrinter v0.2 — supervised Pi / Klipper maintenance
+# AutoPrinter v0.3 â€” supervised Pi / Klipper maintenance
 
 First implementation from the supplied `info.txt` and `activity.txt`. This is a
-bench-test release. It has **not been run on a physical Pi or printer**. The
+bench-test release. Host and accessory setup have been run on an Orange Pi 3 LTS;
+printing, MCU flashing and physical display output remain unverified. The
 included manifest deliberately blocks installation/flashing until the missing
 machine settings, configuration files and release pins have been supplied.
 
 Download and run inventory directly on the Linux Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s --
 ```
 
 Use `--usb-port YOUR_PORT` for a guarded audit, and add
@@ -19,6 +20,22 @@ single-command section below for complete examples.
 
 ## What is included
 
+For the native KIAUH layout, [conditional accessory setup](PERIPHERALS.md)
+installs KlipperScreen, Crowsnest only for a currently/previously detected USB
+webcam, and the current Cartographer plugin only for a currently/previously
+detected Cartographer. It preserves Mainsail on port **80** and the network.
+The default accessory invocation is a read-only plan:
+
+```sh
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s -- --peripherals
+```
+
+The older [host-only development prototype](HOST-SETUP.md) is retained separately.
+The live bench uses official KIAUH templates and real native directories. The
+normal USB-gated full-stack maintenance path and its supported-OS/Ethernet/firmware
+checks remain as documented below; accessory setup does not require a printer
+configuration and deliberately requires Klipper to be inactive.
+
 | File | Purpose |
 | --- | --- |
 | `autoprinter.py` | Linux inventory, audit, install/update/repair and readiness checks |
@@ -26,6 +43,9 @@ single-command section below for complete examples.
 | `prepare.py` | Resolve current official upstream commits and hash a Mainsail release on a preparation computer |
 | `bootstrap.py` | Embedded HTTPS + SHA-256 downloader used by the one-command launcher |
 | `release.py` | Generate ZIP, pinned install.sh, checksum and single-command text |
+| `host_setup.py` | Experimental fresh-host SSH preparation; no MCU/configuration/printing readiness claim |
+| `peripherals.py` | Guarded native-layout accessory installation, with conditional Crowsnest/Cartographer |
+| `peripheral_history.py` | Passive USB detection and persistent positive evidence; no hardware commands |
 | `run.sh` | Local USB-storage launcher |
 | `profiles/` | Place your verified printer files and MCU build config here |
 | `tests/test_safety.py` | Automated safety-policy tests; no printer required |
@@ -146,9 +166,10 @@ file as the report destination.
   and `ModemManager`. The default is empty. Unknown processes are listed for
   review; they are never guessed to be unnecessary and killed.
 
-Mainsail is served on the configurable port **8080** so an existing port-80 site
-can be preserved. The installer creates only its nginx file and checks nginx
-configuration. A busy port causes failure. Your home directory must already be
+Mainsail defaults to port **80**, requiring no port in its address. A recognized
+native KIAUH Mainsail site and its webcam proxy are preserved. Other existing
+enabled sites require review before using port 80; they are never disabled by
+guesswork. A custom unprivileged port remains configurable. Your home must be
 traversable by nginx; permissions are not silently weakened. New Moonraker
 configuration trusts loopback clients only; set up remote authentication using
 Moonraker's documented procedure for your site. Existing Moonraker config is
@@ -266,14 +287,14 @@ Public source: https://github.com/xt-programmer/autoprinter-installer
 Download and run read-only hardware inventory on the target Pi:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sudo sh -s --
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s --
 ```
 
 Choose the trigger's physical USB port from that inventory. For a USB-gated
 audit with the requested capabilities selected (no printer changes):
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --enable-flashing-capability --enable-wifi
 ```
 
 Replace `1-1.3` with the actual trigger port. VID/PID/serial are captured from
@@ -285,7 +306,7 @@ For actual installation/maintenance, supply your completed local machine
 manifest and add `--apply --maintenance-confirmed`:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.2.1/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
+curl --proto '=https' --proto-redir '=https' -fsSL https://raw.githubusercontent.com/xt-programmer/autoprinter-installer/v0.3.0/install.sh | sudo sh -s -- --usb-port 1-1.3 --config /path/to/machine.json --apply --maintenance-confirmed --enable-flashing-capability --enable-wifi
 ```
 
 The public release contains an incomplete generic manifest. Your actual board
@@ -313,11 +334,12 @@ bootstrap file or GitHub account/token is required on the Pi. The tag URL pins
 the launcher version. Initial launcher trust comes from your HTTPS access to
 this repository; payload hashing does not provide an independent signature
 for that first launcher. The source script can be downloaded/reviewed first.
-No password is stored or injected by the ATtiny, and no startup/udev rule or
-reboot-resume task is installed. Standard sudo may request a password on the
+No password is stored or injected by the ATtiny. The main installer adds no
+startup/reboot-resume task; accessory apply installs only the passive USB
+history udev rule described in `PERIPHERALS.md`. Standard sudo may request a password on the
 terminal. A future ATtiny command must execute in an already authorized shell.
 
-Maintainers: `release.py --repository OWNER/REPO --tag v0.2.1 --output /outside/source/release`
+Maintainers: `release.py --repository OWNER/REPO --tag v0.3.0 --output /outside/source/release`
 builds the ZIP, checksum, embedded `install.sh` and exact one-command text.
 Publish the generated ZIP/checksum as release assets and commit `install.sh`
 before tagging that same release. Generated files are outside the source tree
@@ -336,5 +358,5 @@ Run `python3 -m unittest discover -s tests -v` from the extracted folder.
 The included tests cover print/heat/motion/unknown-state refusal, USB identity
 and removal, process cancellation policy, disk gates, checksum/path checks,
 config preservation and limited pruning. See `VALIDATION.md` for the actual
-results and remaining hardware bench checks. No automatic install, flash,
-reboot or printer motion was performed while creating this release.
+results and remaining hardware bench checks. The supervised bench received
+host/accessory installs; no flashing, reboot or printer motion was performed.
