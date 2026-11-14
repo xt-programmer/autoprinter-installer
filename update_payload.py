@@ -179,14 +179,20 @@ def main(argv=None):
     parser.add_argument('--chip',choices=list(fp.PROFILES)+['auto'],default='auto')
     parser.add_argument('--target-port'); parser.add_argument('--target-serial')
     parser.add_argument('--source-commit',help='optional exact upstream SHA; default resolves latest official master once')
+    parser.add_argument('--bench-entry-space-mib',type=int,help='explicit supervised-SSH bench allowance, 2048..3072 MiB; normal default remains 3072')
     for flag in ('apply','enable-flashing-capability','maintenance-confirmed','actuator-power-disconnected','board-confirmed-octopus','allow-bootloader-request','supervised-ssh','flash','prepare-host-update'):
         parser.add_argument('--'+flag,action='store_true')
     parser.add_argument('--ssh-session-pid',type=int)
     for name in ('port','vid','pid','serial'): parser.add_argument('--usb-'+name)
     args=parser.parse_args(argv)
+    if args.bench_entry_space_mib is not None and (not args.apply or not args.supervised_ssh or not 2048<=args.bench_entry_space_mib<=3072):
+        parser.error('--bench-entry-space-mib requires apply + supervised SSH and a value from 2048 to 3072')
+    entry_space=(args.bench_entry_space_mib or 3072)*ap.MIB
     guard=lock=log=service=txn=state=work=candidate=retained=old_private=None
     host=HOME/'klipper'; env=HOME/'klippy-env'
     report={'status':'AUDIT_ONLY','host_updated':False,'env_updated':False,'pair_restored':False,'environment_path':str(env)}
+    report['entry_space_requirement_bytes']=entry_space
+    if args.bench_entry_space_mib is not None: report['supervised_bench_entry_space_mib']=args.bench_entry_space_mib
     code=2
     try:
         device,chip=target(args.target_port,args.target_serial,None if args.chip=='auto' else args.chip)
@@ -252,8 +258,10 @@ def main(argv=None):
             if file_path: protected.append(Path(file_path))
         service.stop(); inactive()
         report['free_bytes_before']=shutil.disk_usage(HOME).free
+        if args.bench_entry_space_mib is not None:
+            screen('warning','Supervised SSH bench entry allowance: %d MiB. Environment-copy and 500 MiB MCU reserves remain enforced.'%args.bench_entry_space_mib)
         screen('info','MicroSD free: %.1f MiB. Checking space and authorized cleanup.'%(report['free_bytes_before']/ap.MIB))
-        report['cleanup_freed_bytes']=storage.ensure_space(['/','/var',HOME],DATA,guard,runner,record,protected,include_gcodes=not service.preexisting_protocol_error)
+        report['cleanup_freed_bytes']=storage.ensure_space(['/','/var',HOME],DATA,guard,runner,record,protected,minimum=entry_space,include_gcodes=not service.preexisting_protocol_error)
         revision=resolve_revision(runner,args.source_commit); report['target_source_commit']=revision; save()
         screen('info','Latest Klipper frozen at '+revision+'. Preparing isolated host and toolchain.')
         report['new_build_packages']=build_tools(runner)

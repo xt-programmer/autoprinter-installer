@@ -836,3 +836,9 @@ image recovery, expected DFU devnum change, source/env restoration, protocol syn
 cleanup cutoff/retention/includes and green after cleanup. This complete payload
 has not received a physical flash test. Previous real H723 write/read-back/reset
 and console login remain the hardware evidence; F446/F429/ATtiny tests are pending.
+
+SUPERVISED BENCH ENTRY-SPACE EXCEPTION
+An explicit --bench-entry-space-mib 2048..3072 requires apply and supervised
+SSH. Normal USB/default entry remains 3072 MiB. This exception is for an inspected
+package/workspace budget; environment-copy +700 MiB and pre-MCU 500 MiB reserves
+still apply. No automatic reduction after low-space failure.

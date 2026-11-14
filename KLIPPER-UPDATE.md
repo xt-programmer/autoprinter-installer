@@ -141,6 +141,13 @@ For an authorized pi SSH shell replace HID options with
 `--supervised-ssh --ssh-session-pid "$$"`. Optional `--chip stm32h723xx`,
 `--target-port PORT`, `--target-serial SERIAL` select a specific known board.
 
+For an explicitly supervised bench with an inspected storage/build-dependency
+budget, `--bench-entry-space-mib 2048` can lower the initial allowance to 2 GiB.
+It requires apply + supervised SSH, accepts only 2048..3072 MiB, and is rejected
+for ordinary USB payloads. The environment-copy reserve and 500 MiB minimum
+before MCU work remain enforced. Default entry space remains 3 GiB. This is an
+explicit bench exception, not automatic low-space fallback.
+
 Tests cover phase ordering/promotion gates, bounded entry/write attempts, partial
 image recovery, expected DFU devnum change, source/env restoration, protocol sync,
 cleanup cutoff/retention/includes and green after cleanup. This complete payload

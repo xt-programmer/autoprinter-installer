@@ -181,6 +181,11 @@ class UpdateTransactionTests(unittest.TestCase):
 
 
 class LatestAndDisplayTests(unittest.TestCase):
+    def test_bench_space_allowance_cannot_be_used_from_usb_or_below_two_gib(self):
+        for args in [[],['--apply'],['--apply','--supervised-ssh']]:
+            value='1024' if '--supervised-ssh' in args else '2048'
+            with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):
+                payload.main(['--bench-entry-space-mib',value]+args)
     def test_build_wrong_revision_refuses_before_make(self):
         runner=Mock(); runner.run.return_value=(0,'b'*40)
         with self.assertRaises(fp.FlashError): payload.build(runner,Guard(),Path('/source'),'stm32h723xx',Path('/output'),'a'*40)
@@ -209,7 +214,7 @@ class LatestAndDisplayTests(unittest.TestCase):
 
 
 class PayloadWiringTests(unittest.TestCase):
-    def exercise(self,unverified=False,protocol=False):
+    def exercise(self,unverified=False,protocol=False,bench=False):
         temp=tempfile.TemporaryDirectory(); self.addCleanup(temp.cleanup)
         root=Path(temp.name); home=root/'home/pi'; home.mkdir(parents=True)
         data=home/'printer_data'; data.mkdir(); states=root/'states'; states.mkdir()
@@ -266,7 +271,7 @@ class PayloadWiringTests(unittest.TestCase):
             for item in patches: stack.enter_context(item)
             output=io.StringIO()
             with contextlib.redirect_stdout(output):
-                code=payload.main(['--klipper-update-only','--apply','--enable-flashing-capability','--maintenance-confirmed','--actuator-power-disconnected','--board-confirmed-octopus','--allow-bootloader-request','--supervised-ssh','--ssh-session-pid','1'])
+                code=payload.main(['--klipper-update-only','--apply','--enable-flashing-capability','--maintenance-confirmed','--actuator-power-disconnected','--board-confirmed-octopus','--allow-bootloader-request','--supervised-ssh','--ssh-session-pid','1']+(['--bench-entry-space-mib','2048'] if bench else []))
         reports=list(states.glob('*/report.json'))
         self.assertEqual(len(reports),1,output.getvalue())
         return code,events,json.loads(reports[0].read_text()),txn
@@ -276,6 +281,13 @@ class PayloadWiringTests(unittest.TestCase):
         self.assertEqual(code,0,report); self.assertLess(events.index('DFU_BACKUP'),events.index('build'))
         self.assertLess(events.index('program'),events.index('promote')); self.assertLess(events.index('clean'),events.index('success'))
         self.assertEqual(events.count('promote'),2); self.assertTrue(report['update_complete'])
+        self.assertEqual(report['entry_space_requirement_bytes'],3*ap.GIB)
+
+    def test_explicit_ssh_bench_records_two_gib_allowance(self):
+        code,events,report,txn=self.exercise(bench=True)
+        self.assertEqual(code,0)
+        self.assertEqual(report['supervised_bench_entry_space_mib'],2048)
+        self.assertEqual(report['entry_space_requirement_bytes'],2*ap.GIB)
 
     def test_unverified_receipt_never_promotes_source_or_environment_or_shows_green(self):
         code,events,report,txn=self.exercise(unverified=True)
