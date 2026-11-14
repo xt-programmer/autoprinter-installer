@@ -218,7 +218,8 @@ class PayloadWiringTests(unittest.TestCase):
         guard=Guard(); guard.cancelled.wait=Mock(); events=[]
         service=Mock(was_active=False,preexisting_protocol_error=False,stopped=False)
         service.stop.side_effect=lambda:events.append('stop')
-        service.resume.side_effect=[fp.ProtocolError('MCU Protocol error'),fp.ProtocolError('MCU Protocol error')] if protocol else lambda:events.append('resume') or 'PRESERVED_INACTIVE'
+        def resume_error(): events.append('resume'); raise fp.ProtocolError('MCU Protocol error')
+        service.resume.side_effect=resume_error if protocol else lambda:events.append('resume') or 'PRESERVED_INACTIVE'
         dictionary={'version':'new','config':{'MCU':'stm32h723xx'}}
         normal={'port':'5-1','serial':'NORMAL','vid':'1d50','pid':'614e','manufacturer':'Klipper','product':'stm32h723xx','path':str(root/'usb'),'busnum':'5','devnum':'4'}
         (root/'usb').mkdir()
@@ -241,7 +242,7 @@ class PayloadWiringTests(unittest.TestCase):
         def command(args,**kwargs):
             args=list(map(str,args))
             if args[0]=='git':
-                if 'rev-parse' in args: return 0,'a'*40
+                if 'rev-parse' in args: return 0,('a' if (host/'klippy/klippy.py').read_text()=='old' else 'b')*40
                 if 'describe' in args: return 0,'old-version'
             if args[0]=='du': return 0,'1000\told-env'
             if args[0]=='systemctl' and 'is-active' in args: return 0,'inactive'
@@ -284,6 +285,7 @@ class PayloadWiringTests(unittest.TestCase):
         code,events,report,txn=self.exercise(protocol=True)
         self.assertEqual(code,2); self.assertTrue(report.get('protocol_sync_attempted'),report); self.assertTrue(report['pair_restored'])
         self.assertEqual(txn.program.call_count,1) # already-matching selected MCU is not blindly reflashed
+        self.assertEqual(events.count('resume'),2)
         self.assertNotIn('success',events); self.assertEqual(events.count('restore'),1)
 
 

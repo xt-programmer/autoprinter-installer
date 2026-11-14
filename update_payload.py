@@ -134,6 +134,8 @@ def build(runner,guard,source,chip,output,revision):
 
 def promote(path,candidate,stamp,state,guard):
     retained=path.with_name(path.name+'.before-update-'+stamp)
+    if retained.exists() or retained.is_symlink() or path.is_symlink() or candidate.is_symlink():
+        raise fp.FlashError('Promotion paths are not unique native directories')
     ap.atomic_write(state/(path.name+'-promotion.json'),json.dumps({'path':str(path),'candidate':str(candidate),'retained':str(retained)}),guard)
     guard.check(); path.rename(retained)
     try:

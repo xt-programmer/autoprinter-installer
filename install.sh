@@ -1,8 +1,8 @@
 #!/bin/sh
-# Auto-generated for xt-programmer/autoprinter-installer v0.7.0; payload pinned below.
+# Auto-generated for xt-programmer/autoprinter-installer v0.8.0; payload pinned below.
 set -eu
 command -v python3 >/dev/null 2>&1 || { echo 'Python 3.9+ is required' >&2; exit 2; }
-exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.7.0/auto-installer-v0.7.zip --sha256 8085f068448f465f44d65095fec06aa96d7d57b62788bcee189ee9190d2afbaf "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
+exec python3 - --url https://github.com/xt-programmer/autoprinter-installer/releases/download/v0.8.0/auto-installer-v0.8.zip --sha256 e2955b1fe80ade3be62799c59a4f266e6b4b2b8eb69b6a798af2d32a2198ba6a "$@" <<'AUTOPRINTER_BOOTSTRAP_020'
 #!/usr/bin/env python3
 """Download and run a SHA-256-pinned AutoPrinter release.
 
@@ -236,7 +236,7 @@ def main(argv=None):
             raise RuntimeError("Bundle checksum mismatch; nothing executed")
         dest = work / "bundle"
         unpack(archive, dest, check)
-        entrypoint = 'board_flash.py' if args.board_flash or args.klipper_update_only else "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
+        entrypoint = 'update_payload.py' if args.klipper_update_only else 'board_flash.py' if args.board_flash else "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
         scripts = list(dest.glob("*/"+entrypoint)) + list(dest.glob(entrypoint))
         if len(scripts) != 1:
             raise RuntimeError("Bundle must have one AutoPrinter entry point at root or one directory deep")
