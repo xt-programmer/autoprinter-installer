@@ -157,3 +157,10 @@ Octopus/profile and bootloader-request flags. The private kit's 06/07 scripts
 are tied to the inspected .170 H723 identity, not generic printer selectors.
 Keep its USB supervision and normal screen-return helper through the entire
 update/recovery. No monitor/worker is installed for later protocol errors.
+
+v0.8.0 update-only kit supersedes the v0.7.0 update instructions: just two private
+scripts, 01-PLAN-UPDATE and 02-UPDATE-LATEST. Latest is resolved once per job and
+built on the Pi after DFU proof. The apply payload includes authorized low-space
+cleanup and physical isolation confirmations. Exactly one supported normal
+Octopus is selected, or explicit selectors can be supplied when generating a
+machine-specific payload. Read KLIPPER-UPDATE.md before selecting the write file.

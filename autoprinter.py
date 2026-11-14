@@ -31,7 +31,7 @@ import config_profiles as cp
 import flash_policy as fp
 import screen_runtime as sr
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
 REPOS = {
@@ -1372,8 +1372,8 @@ def arguments(argv=None):
 def main(argv=None):
     argv=list(sys.argv[1:] if argv is None else argv)
     if '--klipper-update-only' in argv:
-        import board_flash
-        return board_flash.main(argv)
+        import update_payload
+        return update_payload.main(argv)
     args = arguments(argv)
     if platform.system() != "Linux":
         print("REFUSED: run on the target Linux Pi; this program does not modify Windows.", file=sys.stderr)

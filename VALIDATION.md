@@ -1,3 +1,22 @@
+# Validation record - v0.8.0
+
+14 November 2026: latest-source update payload, cleanup, bounded retries/recovery.
+
+- Windows: 238 discovered, 233 passed, five POSIX-only skips. Tests cover full
+  payload phase/promotion ordering, two DFU-entry attempts, two image attempts,
+  partial failed writes and exact old-flash restoration, no-write build recovery,
+  source/environment restoration, fresh protocol sync and no false green.
+- Cleanup tests cover 48-hour cutoff, current/newest backup retention, active
+  includes (including new references), changed files, symlinks, capacity cutoff
+  and confined scratch removal. POSIX uses a checked directory fd for unlink.
+- Recovery compares fixed ROM identity/port/flash layout, permitting expected
+  changes in dfu-util's USB devnum. Saved bootloader/outside sectors must match.
+- Official master resolved to 29d4ec2d6d840ee839333306003a400da186d41d during
+  development; all three profiles already compiled at that exact source. A run
+  resolves again once, then freezes the result. No moving second source fetch.
+- No physical flash, service/config/radio change or Pi reboot was performed for
+  the new complete payload. Previous H723 and console evidence follows below.
+
 # Validation record - v0.7.0
 
 12 November 2026: Klipper/board-only transaction and protocol-error downgrade.

@@ -12,6 +12,7 @@ from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import autoprinter as ap
 import board_flash
+import update_payload
 import flash_policy as fp
 import make_hid
 import mcu_identify
@@ -99,7 +100,7 @@ class PairedTransactionTests(unittest.TestCase):
     def test_changed_flash_refuses_recovery_download(self):
         txn,bundle,normal,model,old,calls,reset=self.rig()
         txn.execute(bundle,normal,allow_request=True,require_recovery=True); model['drift']=True
-        with self.assertRaisesRegex(fp.FlashError,'changed since'): paired.restore_board(txn,Mock())
+        with self.assertRaisesRegex(fp.FlashError,'changed'): paired.restore_board(txn,Mock())
         self.assertEqual(model['downloads'],1)
 
     def test_corrupt_backup_refuses_even_bootloader_request(self):
@@ -208,13 +209,20 @@ class LifecycleTests(unittest.TestCase):
         for path,content in [(host,'new'),(retained,'old')]:
             (path/'klippy').mkdir(parents=True); (path/'klippy/klippy.py').write_text(content)
         txn=Mock(); txn.guard=Guard(); txn.state=root/'state'; txn.state.mkdir()
-        txn.runner.run.side_effect=[(0,'a'*40),(0,'')]
-        report={'host_commit_before':'a'*40,'host_entry_sha256_before':fp.sha(b'old'),'host_updated':True}
+        env=root/'env'; old_env=root/'old-env'
+        for path,content in [(env,'new env'),(old_env,'old env')]:
+            path.mkdir(); (path/'pyvenv.cfg').write_text(content)
+        txn.runner.run.side_effect=[(0,'a'*40),(0,''),(0,'package==1')]
+        report={'host_commit_before':'a'*40,'host_entry_sha256_before':fp.sha(b'old'),'host_updated':True,
+                'environment_path':str(env),'env_retained':str(old_env),'env_updated':True,
+                'env_config_sha256_before':fp.sha(b'old env'),'env_freeze_sha256_before':fp.sha(b'package==1')}
         def restored(*args): self.assertEqual((host/'klippy/klippy.py').read_text(),'new')
         with patch.object(paired,'restore_board',side_effect=restored): paired.restore_pair(txn,service,host,retained,report,Mock())
         self.assertEqual((host/'klippy/klippy.py').read_text(),'old')
         self.assertEqual((Path(report['failed_host_retained'])/'klippy/klippy.py').read_text(),'new')
         self.assertTrue(report['pair_restored']); self.assertFalse(report['host_updated'])
+        self.assertEqual((env/'pyvenv.cfg').read_text(),'old env'); self.assertFalse(report['env_updated'])
+        self.assertEqual((Path(report['failed_env_retained'])/'pyvenv.cfg').read_text(),'new env')
 
 
 class EntryTests(unittest.TestCase):
@@ -254,7 +262,7 @@ class EntryTests(unittest.TestCase):
             with self.assertRaises(fp.FlashError): paired.native_launch(props,path)
 
     def test_local_flag_routes_only_to_board_entrypoint(self):
-        with patch.object(board_flash,'main',return_value=0) as entry:
+        with patch.object(update_payload,'main',return_value=0) as entry:
             self.assertEqual(ap.main(['--klipper-update-only','--chip','stm32h723xx']),0)
         entry.assert_called_once_with(['--klipper-update-only','--chip','stm32h723xx'])
 

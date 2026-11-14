@@ -231,7 +231,7 @@ def main(argv=None):
             raise RuntimeError("Bundle checksum mismatch; nothing executed")
         dest = work / "bundle"
         unpack(archive, dest, check)
-        entrypoint = 'board_flash.py' if args.board_flash or args.klipper_update_only else "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
+        entrypoint = 'update_payload.py' if args.klipper_update_only else 'board_flash.py' if args.board_flash else "config_sync.py" if args.configs else "peripherals.py" if args.peripherals else "autoprinter.py"
         scripts = list(dest.glob("*/"+entrypoint)) + list(dest.glob(entrypoint))
         if len(scripts) != 1:
             raise RuntimeError("Bundle must have one AutoPrinter entry point at root or one directory deep")

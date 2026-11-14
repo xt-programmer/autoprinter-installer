@@ -91,6 +91,7 @@ class DownloadTests(unittest.TestCase):
             z.writestr("auto-installer-v0.2/peripherals.py", "# accessory fixture only\n")
             z.writestr("auto-installer-v0.2/config_sync.py", "# config fixture only\n")
             z.writestr('auto-installer-v0.2/board_flash.py','# flash fixture only\n')
+            z.writestr('auto-installer-v0.2/update_payload.py','# update fixture only\n')
             z.writestr("auto-installer-v0.2/manifest.json", "{}")
         return stream.getvalue()
 
@@ -144,7 +145,7 @@ class DownloadTests(unittest.TestCase):
     def test_paired_update_routes_to_board_only_and_preserves_mode(self):
         with tempfile.TemporaryDirectory() as t:
             command=self.invoke(Path(t),['--klipper-update-only','--chip','stm32h723xx','--target-port','5-1','--target-serial','ABC']).call_args.args[1]
-            self.assertTrue(command[1].endswith('board_flash.py'))
+            self.assertTrue(command[1].endswith('update_payload.py'))
             self.assertIn('--klipper-update-only',command); self.assertNotIn('--apply',command)
 
     def test_specialized_modes_cannot_be_combined(self):

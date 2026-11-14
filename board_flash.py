@@ -14,6 +14,11 @@ from host_setup import SSHGuard
 
 
 def main(argv=None):
+    import sys
+    supplied=list(sys.argv[1:] if argv is None else argv)
+    if '--klipper-update-only' in supplied:
+        import update_payload
+        return update_payload.main(supplied)
     parser=argparse.ArgumentParser(description=__doc__,allow_abbrev=False)
     parser.add_argument('--firmware-bundle',type=Path,help='external reviewed bundle; default is the release-pinned bundled image for --chip')
     parser.add_argument('--expected-firmware-sha256',help='required for an external firmware bundle')

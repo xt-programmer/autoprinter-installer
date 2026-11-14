@@ -82,29 +82,32 @@ def verify_plugins(root,records,guard):
             raise fp.FlashError('Preserved plugin changed during transaction: '+record['relative'])
 
 
-def restore_board(txn,reset_old):
+def restore_board(txn,reset_old,allow_partial=False):
     """One restorative download, followed by full backup equality and old identity."""
     txn.guard.check(); txn.inactive()
     r=txn.result
-    if r.get('state') not in ('READBACK_VERIFIED','VERIFIED') or r.get('recovery',{}).get('write_attempts',0):
+    allowed=('BACKED_UP','WRITE_STARTED','PROGRAM_FAILED','READBACK_VERIFIED','VERIFIED') if allow_partial else ('READBACK_VERIFIED','VERIFIED')
+    if r.get('state') not in allowed or r.get('recovery',{}).get('write_attempts',0):
         raise fp.FlashError('Recovery is bounded to one application restoration after a verified update read-back')
-    if not r.get('readback_sha256') or not r.get('before_identity'):
+    if (not allow_partial and not r.get('readback_sha256')) or not r.get('before_identity'):
         raise fp.FlashError('No verified prior application/dictionary and new read-back for paired recovery')
     before=(txn.state/'flash-before.bin').read_bytes()
-    after=(txn.state/'flash-after.bin').read_bytes()
-    if fp.sha(before)!=r['backup_sha256'] or fp.sha(after)!=r['readback_sha256'] or len(before)!=r['backup_bytes']:
+    after=(txn.state/'flash-after.bin').read_bytes() if not allow_partial else None
+    if fp.sha(before)!=r['backup_sha256'] or (not allow_partial and fp.sha(after)!=r['readback_sha256']) or len(before)!=r['backup_bytes']:
         raise fp.FlashError('Recovery backup/read-back integrity failure')
     original=r['initial_usb']; dfu=r['dfu_usb']; p=r['profile']
     device=of.match_port(original['port'])
-    if any(device.get(k)!=original[k] for k in ('port','vid','pid','serial','manufacturer','product')):
+    normal=all(device.get(k)==original[k] for k in ('port','vid','pid','serial','manufacturer','product'))
+    in_dfu=allow_partial and (device['vid'],device['pid'],device['serial'])==('0483','df11',dfu['serial'])
+    if not normal and not in_dfu:
         raise fp.FlashError('Recovery requires the same normal-mode board identity')
-    offset=p['address']-0x08000000; end=r['erase_end']-0x08000000
+    offset=p['address']-0x08000000; end=r.get('erase_end',0x08000000+len(before))-0x08000000
     fp.validate_range(r['dfu_memory_descriptor'],p['address'],end-offset)
-    if not offset<end<=len(before) or before[:offset]!=after[:offset] or before[end:]!=after[end:]:
+    if not offset<end<=len(before) or (not allow_partial and (before[:offset]!=after[:offset] or before[end:]!=after[end:])):
         raise fp.FlashError('Recovery sector boundaries/bootloader preservation failed')
     recovery=r['recovery']={'state':'REQUESTING_DFU','write_attempts':0}
     txn.record()
-    recovery['bootloader_request_exit']=of.bootloader_request(txn.runner,of.serial_path(device))
+    if normal: recovery['bootloader_request_exit']=of.bootloader_request(txn.runner,of.serial_path(device))
     device=txn.wait(original['port'],lambda d:d['vid']=='0483' and d['pid']=='df11' and d['serial']==dfu['serial'],20)
     target=ap.USBGuard(device).start()
     runner=ap.Runner(of.CombinedGuard(txn.guard,target),txn.runner.emit)
@@ -114,17 +117,21 @@ def restore_board(txn,reset_old):
     try:
         _,listing=run(['--list'],15)
         selected=[s for s in listing.splitlines() if 'alt=0' in s and ('serial="'+device['serial']+'"') in s and ('path="'+device['port']+'"') in s]
-        if selected!=[r['dfu_memory_descriptor']]:
+        if len(selected)!=1 or fp.flash_layout(selected[0])!=fp.flash_layout(r['dfu_memory_descriptor']):
             raise fp.FlashError('Recovery DFU map/identity differs from original')
         current=txn.state/'recovery-before.bin'
         run(['--dfuse-address','0x08000000:'+str(len(before)),'--upload',str(current)])
-        if current.read_bytes()!=after:
+        current_bytes=current.read_bytes()
+        if len(current_bytes)!=len(before) or current_bytes[:offset]!=before[:offset] or current_bytes[end:]!=before[end:]:
+            raise fp.FlashError('Bootloader or untouched flash changed; application-only recovery cannot repair it')
+        if not allow_partial and current_bytes!=after:
             raise fp.FlashError('Board flash changed since verified update; no restorative write permitted')
-        image=txn.state/'recovery-application.bin'
-        ap.atomic_write(image,before[offset:end],txn.guard)
-        recovery.update(state='WRITE_STARTED',write_attempts=1,image_sha256=fp.sha(before[offset:end]))
-        txn.record()
-        run(['--dfuse-address','0x%x'%p['address'],'--download',str(image)],180)
+        if current_bytes!=before:
+            image=txn.state/'recovery-application.bin'
+            ap.atomic_write(image,before[offset:end],txn.guard)
+            recovery.update(state='WRITE_STARTED',write_attempts=1,image_sha256=fp.sha(before[offset:end]))
+            txn.record()
+            run(['--dfuse-address','0x%x'%p['address'],'--download',str(image)],180)
         restored=txn.state/'recovery-after.bin'
         run(['--dfuse-address','0x08000000:'+str(len(before)),'--upload',str(restored)])
         if restored.read_bytes()!=before:
@@ -151,27 +158,40 @@ class Service:
     def __init__(self,runner,guard,state,log=Path('/home/pi/printer_data/logs/klippy.log')):
         self.runner,self.guard,self.state,self.log=runner,guard,Path(state),Path(log)
         self.was_active=False
+        self.preexisting_protocol_error=False
+        self.stopped=False
 
     def properties(self):
         _,out=self.runner.run(['systemctl','show','klipper.service','--property=ActiveState,SubState,MainPID,NRestarts,ExecStart,User,EnvironmentFiles'],timeout=15)
         return dict(line.split('=',1) for line in out.splitlines() if '=' in line)
 
-    def preflight(self):
+    def preflight(self,allow_protocol_failure=False):
         props=self.properties(); active=props.get('ActiveState')
         native_launch(props)
         if active not in ('active','inactive'): raise fp.FlashError('Klipper must be healthy active or inactive, not failed/transitioning')
         self.was_active=active=='active'
-        if self.was_active: ap.safe_idle(ap.printer_snapshot('http://127.0.0.1:7125',os.environ.get('AUTOPRINTER_MOONRAKER_KEY'))[0])
+        if self.was_active:
+            try: ap.safe_idle(ap.printer_snapshot('http://127.0.0.1:7125',os.environ.get('AUTOPRINTER_MOONRAKER_KEY'))[0])
+            except ap.Refuse:
+                if not allow_protocol_failure: raise
+                info=ap.url_json('http://127.0.0.1:7125/printer/info',os.environ.get('AUTOPRINTER_MOONRAKER_KEY'))
+                if str(info.get('process_id'))!=props.get('MainPID') or info.get('state')!='error' or not protocol_error(str(info.get('state_message',''))): raise
+                self.preexisting_protocol_error=True
         ap.atomic_write(self.state/'SERVICE_BEFORE.json',json.dumps({'was_active':self.was_active}),self.guard)
 
     def stop(self):
         if self.was_active:
-            ap.safe_idle(ap.printer_snapshot('http://127.0.0.1:7125',os.environ.get('AUTOPRINTER_MOONRAKER_KEY'))[0])
+            if self.preexisting_protocol_error:
+                info=ap.url_json('http://127.0.0.1:7125/printer/info',os.environ.get('AUTOPRINTER_MOONRAKER_KEY'))
+                if info.get('state')!='error' or not protocol_error(str(info.get('state_message',''))):
+                    ap.safe_idle(ap.printer_snapshot('http://127.0.0.1:7125',os.environ.get('AUTOPRINTER_MOONRAKER_KEY'))[0])
+            else: ap.safe_idle(ap.printer_snapshot('http://127.0.0.1:7125',os.environ.get('AUTOPRINTER_MOONRAKER_KEY'))[0])
             self.stop_for_recovery()
 
     def stop_for_recovery(self):
         self.runner.run(['systemctl','stop','klipper.service'],timeout=30)
         if self.properties().get('ActiveState')!='inactive': raise fp.FlashError('Klipper failed to stop')
+        self.stopped=True
 
     def resume(self,timeout=60):
         if not self.was_active: return 'PRESERVED_INACTIVE'
@@ -188,7 +208,7 @@ class Service:
                     start=cursor[2] if cursor and (stat.st_dev,stat.st_ino)==cursor[:2] and stat.st_size>=cursor[2] else 0
                     if stat.st_size-start>8*ap.MIB: raise fp.FlashError('Fresh startup log exceeds verification bound')
                     stream.seek(start); text=stream.read(8*ap.MIB).decode(errors='replace')
-                if protocol_error(text): raise fp.ProtocolError('Fresh Klipper startup log reports an MCU protocol mismatch')
+                if protocol_error(text): raise fp.ProtocolError('Fresh Klipper startup log reports an MCU protocol mismatch: '+text[-4000:])
             except FileNotFoundError: pass
             props=self.properties()
             if props.get('ActiveState') not in ('active','activating'):
@@ -200,7 +220,7 @@ class Service:
             # Exclude Moonraker's cached response from the old Klipper process.
             same_process=pid not in (None,'0') and str(info.get('process_id'))==pid
             if same_process and protocol_error(str(info.get('state_message',''))):
-                raise fp.ProtocolError('Current Klipper process reports an MCU protocol mismatch')
+                raise fp.ProtocolError('Current Klipper process reports an MCU protocol mismatch: '+str(info.get('state_message',''))[:6000])
             if same_process and info.get('state')=='ready' and props.get('SubState')=='running':
                 if ready_pid!=pid: ready_since=time.monotonic(); ready_pid=pid
                 if time.monotonic()-ready_since>=5:
@@ -211,7 +231,7 @@ class Service:
         raise fp.FlashError('Klipper did not become ready in the startup verification window')
 
 
-def restore_pair(txn,service,host,retained,report,reset_old):
+def restore_pair(txn,service,host,retained,report,reset_old,allow_partial=False):
     """Board first; never report host-only restoration as a restored pair."""
     txn.guard.check(); service.stop_for_recovery()
     old=retained if retained is not None else host
@@ -222,7 +242,14 @@ def restore_pair(txn,service,host,retained,report,reset_old):
     if commit!=report['host_commit_before'] or dirty:
         raise fp.FlashError('Retained host revision/working tree changed; recovery refused')
     verify_plugins(old,report.get('preserved_plugins',[]),txn.guard)
-    restore_board(txn,reset_old)
+    old_env=Path(report['env_retained']) if report.get('env_retained') else Path(report.get('environment_path','/home/pi/klippy-env'))
+    if report.get('env_config_sha256_before'):
+        if old_env.is_symlink() or not old_env.is_dir() or ap.sha256(old_env/'pyvenv.cfg',txn.guard)!=report['env_config_sha256_before']:
+            raise fp.FlashError('Retained environment integrity check failed before board recovery')
+        _,freeze=txn.runner.run([old_env/'bin/python','-m','pip','freeze','--all'],timeout=60)
+        if fp.sha(freeze.encode())!=report['env_freeze_sha256_before']: raise fp.FlashError('Retained environment packages changed before board recovery')
+    if allow_partial: restore_board(txn,reset_old,allow_partial=True)
+    else: restore_board(txn,reset_old)
     if retained is not None:
         if not retained.is_dir() or retained.is_symlink() or host.is_symlink():
             raise fp.FlashError('Retained native host directory unavailable for recovery')
@@ -237,6 +264,21 @@ def restore_pair(txn,service,host,retained,report,reset_old):
             if not txn.guard.cancelled.is_set() and not host.exists(): failed.rename(host)
             raise
         report.update(host_updated=False,failed_host_retained=str(failed))
+    if report.get('env_retained'):
+        env=Path(report.get('environment_path','/home/pi/klippy-env')); old_env=Path(report['env_retained'])
+        if not old_env.is_dir() or old_env.is_symlink() or env.is_symlink(): raise fp.FlashError('Retained environment unavailable')
+        failed=env.with_name('klippy-env.failed-'+txn.state.name)
+        if failed.exists(): raise fp.FlashError('Environment recovery destination already exists')
+        txn.guard.check(); env.rename(failed)
+        try:
+            txn.guard.check(); old_env.rename(env)
+        except Exception:
+            if not txn.guard.cancelled.is_set() and not env.exists(): failed.rename(env)
+            raise
+        report.update(env_updated=False,failed_env_retained=str(failed))
     report.update(pair_restored=True,host_commit_after=report['host_commit_before'])
-    report['service_after_recovery']=service.resume()
+    if service.preexisting_protocol_error:
+        service.runner.run(['systemctl','start','klipper.service'],timeout=30)
+        report['service_after_recovery']='PREVIOUS_PROTOCOL_ERROR_STATE_RESTORED'
+    else: report['service_after_recovery']=service.resume()
     report['status']='PROTOCOL_ERROR_PREVIOUS_PAIR_RESTORED'
