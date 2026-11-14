@@ -842,3 +842,17 @@ An explicit --bench-entry-space-mib 2048..3072 requires apply and supervised
 SSH. Normal USB/default entry remains 3072 MiB. This exception is for an inspected
 package/workspace budget; environment-copy +700 MiB and pre-MCU 500 MiB reserves
 still apply. No automatic reduction after low-space failure.
+
+16. FULL H723 BENCH RUN VERIFIED, 14 NOVEMBER 2026
+Complete supervised SSH path passed with explicit 2048 MiB entry allowance.
+Off-device 1 MiB original backup was acknowledged before a fresh Pi build. One
+application write at 0x08020000 passed full read-back, bootloader/outside range
+preservation and live dictionary before/after MCU reset. Candidate protocol
+validation preceded native host/environment promotion. Cleanup removed out and
+staging; prior source/environment and all flash backups stayed. Klipper remained
+inactive without printer.cfg and GUI PID1192 stayed active, zero restarts. Root
+evidence: /var/lib/autoprinter/update-20261114T130256.349000Z/. Normal USB gate
+remains 3 GiB. Four new bench-only cross-build packages were separately removed
+after an exact removal-plan check; pip/dpkg/GUI passed, about 2.04 GiB free.
+This run did not test physical downgrade, motion/heaters, cold power, a Pi reboot
+or the full Flipper display-return path. See VALIDATION.md for image hashes.

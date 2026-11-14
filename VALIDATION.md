@@ -1,5 +1,26 @@
 # Validation record - v0.8.0
 
+14 November 2026: complete supervised SSH H723 bench update succeeded (exit 0),
+using the tested explicit 2048 MiB entry allowance from commit c07b8ca. Normal
+default remains 3072 MiB; environment-copy and pre-MCU reserves stayed enforced.
+Full original 1 MiB backup was copied/verified off-device before writing. Fresh
+local GCC 14.2.1 build at 29d4ec2 produced a 46,808-byte application; exactly one
+write at 0x08020000 passed full read-back, unchanged bootloader/outside sectors,
+live built dictionary, MCU reset and candidate host protocol checks. Matching
+native source/environment were promoted afterward, previous trees retained.
+Native help/pip entrypoint/check and dpkg audit passed; generated outputs and
+staging were removed. Klipper stayed inactive without printer.cfg; GUI PID1192
+remained active with zero restarts. No motion/heater/Pi reboot or cold-power test.
+No protocol mismatch was injected, so physical downgrade remains untested.
+Original flash SHA 010bc5306798d0ab908fa06a1a0680ebf81eabc704631e954466e3d1ef9a832d;
+new image SHA e7b2e790f26e958e9f59fe34d74aa799ad66fbf7172ecd99718bc09ce9616bca;
+new full-flash SHA e46aba3185d0a6f75f64467bd3e96fa0e9add251669b57d0c6331dcb1ca5f8b3.
+Root evidence: /var/lib/autoprinter/update-20261114T130256.349000Z/.
+After separate supervised removal of only the four newly installed cross-build
+packages, native pip/dpkg/GUI checks passed and free space was about 2.04 GiB.
+Recovery data and previous source/environment stayed; temporary bench files gone.
+Linux CI at c07b8ca: all 240 tests pass under Python 3.9/3.12/3.14.
+
 14 November 2026: latest-source update payload, cleanup, bounded retries/recovery.
 
 - Windows: 238 discovered, 233 passed, five POSIX-only skips. Tests cover full

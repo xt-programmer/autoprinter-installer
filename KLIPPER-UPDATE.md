@@ -150,6 +150,9 @@ explicit bench exception, not automatic low-space fallback.
 
 Tests cover phase ordering/promotion gates, bounded entry/write attempts, partial
 image recovery, expected DFU devnum change, source/env restoration, protocol sync,
-cleanup cutoff/retention/includes and green after cleanup. This complete payload
-has not received a physical flash test. Previous real H723 write/read-back/reset
-and console login remain the hardware evidence; F446/F429/ATtiny tests are pending.
+cleanup cutoff/retention/includes and green after cleanup. On 14 November the full
+SSH H723 path passed a fresh Pi build, one actual application write, whole-flash
+read-back, preserved bootloader, live/post-reset dictionary checks and paired
+source/environment promotion. It used the explicit measured bench space allowance.
+Physical downgrade, F446/F429, cold-power testing and the complete Flipper/ATtiny
+insertion/display-return sequence still need their own tests. See VALIDATION.md.
